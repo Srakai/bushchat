@@ -1,95 +1,87 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+import React, { useState } from 'react';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+import ApiKeyInput from '../components/ApiKeyInput';
+import ChatInterface from '../components/ChatInterface';
+import ConversationFlow from '../components/ConversationFlow';
+import DraggableNode from '../components/DraggableNode';
+import { Box, Container } from '@mui/material';
 
-export default function Home() {
+const models = ['text-davinci-003', 'text-curie-001', 'text-babbage-001', 'text-ada-001'];
+
+const Home = () => {
+  const [apiKey, setApiKey] = useState(localStorage.getItem('openaiApiKey') || '');
+
+  const handleSaveApiKey = (key) => {
+    setApiKey(key);
+  };
+
+  const handleSendMessage = async (message, model) => {
+    const apiKey = localStorage.getItem('openaiApiKey');
+    if (!apiKey) {
+      alert('Please enter your OpenAI API key.');
+      return;
+    }
+
+    const newNode = {
+      id: String(new Date().getTime()),
+      position: { x: 100, y: 100 },
+      data: { label: 'New Node', text: message },
+    };
+    setNodes((nds) => nds.concat(newNode));
+
+    try {
+      const response = await axios.post(
+        `https://api.openai.com/v1/engines/${model}/completions`,
+        {
+          prompt: message,
+          max_tokens: 50,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+        }
+      );
+
+      const responseText = response.data.choices[0].text;
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === newNode.id) {
+            return {
+              ...node,
+              data: { ...node.data, text: responseText },
+            };
+          }
+          return node;
+        })
+      );
+    } catch (error) {
+      console.error(error);
+      alert('Failed to fetch data from OpenAI API.');
+    }
+  };
+
   return (
-    <main className={styles.main}>
-      <div className={styles.description}>
-        <p>
-          Get started by editing&nbsp;
-          <code className={styles.code}>src/app/page.js</code>
-        </p>
-        <div>
-          <a
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className={styles.vercelLogo}
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
-
-      <div className={styles.center}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className={styles.grid}>
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Docs <span>-&gt;</span>
-          </h2>
-          <p>Find in-depth information about Next.js features and API.</p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Learn <span>-&gt;</span>
-          </h2>
-          <p>Learn about Next.js in an interactive course with&nbsp;quizzes!</p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Templates <span>-&gt;</span>
-          </h2>
-          <p>Explore starter templates for Next.js.</p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2>
-            Deploy <span>-&gt;</span>
-          </h2>
-          <p>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+    <DndProvider backend={HTML5Backend}>
+      <Container>
+        {!apiKey && <ApiKeyInput onSave={handleSaveApiKey} />}
+        {apiKey && (
+          <Box display="flex" flexDirection="row">
+            <Box sx={{ width: '200px', p: 2, borderRight: 1, borderColor: 'grey.300' }}>
+              <DraggableNode id="node-1" data={{ label: 'Node 1' }} />
+              <DraggableNode id="node-2" data={{ label: 'Node 2' }} />
+            </Box>
+            <Box sx={{ flexGrow: 1, p: 2 }}>
+              <ChatInterface onSendMessage={handleSendMessage} models={models} />
+              <ConversationFlow />
+            </Box>
+          </Box>
+        )}
+      </Container>
+    </DndProvider>
   );
-}
+};
+
+export default Home;
