@@ -18,6 +18,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import MergeIcon from "@mui/icons-material/CallMerge";
+import RefreshIcon from "@mui/icons-material/Refresh";
 
 const COLLAPSE_THRESHOLD = 500; // Characters before showing collapse option
 
@@ -84,6 +85,7 @@ const ChatNode = ({ id, data, selected }) => {
   const isLoading = data.status === "loading";
   const isRoot = data.isRoot;
   const isMergeSource = data.isMergeSource;
+  const isMergedNode = data.isMergedNode;
 
   const handleStartEdit = (e) => {
     e.stopPropagation();
@@ -112,13 +114,18 @@ const ChatNode = ({ id, data, selected }) => {
     data.onMergeNode?.(id);
   };
 
+  const handleRegenerateMerge = (e) => {
+    e.stopPropagation();
+    data.onRegenerateMerge?.(id);
+  };
+
   return (
     <Box
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       sx={{
-        minWidth: 280,
-        maxWidth: 400,
+        minWidth: 350,
+        maxWidth: 500,
         backgroundColor: selected ? "#1e1e1e" : "#2a2a2a",
         border: isMergeSource
           ? "2px solid #ff9800"
@@ -160,21 +167,40 @@ const ChatNode = ({ id, data, selected }) => {
             zIndex: 10,
           }}
         >
-          <Tooltip title="Edit message">
-            <IconButton
-              size="small"
-              onClick={handleStartEdit}
-              sx={{
-                backgroundColor: "#444",
-                color: "#fff",
-                width: 24,
-                height: 24,
-                "&:hover": { backgroundColor: "#555" },
-              }}
-            >
-              <EditIcon sx={{ fontSize: 14 }} />
-            </IconButton>
-          </Tooltip>
+          {!isMergedNode && (
+            <Tooltip title="Edit message">
+              <IconButton
+                size="small"
+                onClick={handleStartEdit}
+                sx={{
+                  backgroundColor: "#444",
+                  color: "#fff",
+                  width: 24,
+                  height: 24,
+                  "&:hover": { backgroundColor: "#555" },
+                }}
+              >
+                <EditIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {isMergedNode && (
+            <Tooltip title="Regenerate merge (respects edge context settings)">
+              <IconButton
+                size="small"
+                onClick={handleRegenerateMerge}
+                sx={{
+                  backgroundColor: "#ff9800",
+                  color: "#fff",
+                  width: 24,
+                  height: 24,
+                  "&:hover": { backgroundColor: "#ffb74d" },
+                }}
+              >
+                <RefreshIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title="Merge branches here">
             <IconButton
               size="small"
