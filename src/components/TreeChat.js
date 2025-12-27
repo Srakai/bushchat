@@ -1,7 +1,12 @@
 "use client";
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+  useEffect,
+} from "react";
 import ReactFlow, {
-  addEdge,
   Controls,
   Background,
   useNodesState,
@@ -18,7 +23,6 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel,
   Paper,
   Typography,
   IconButton,
@@ -93,14 +97,113 @@ const buildConversationFromPath = (path) => {
   return messages;
 };
 
+// Find the lowest common ancestor of two nodes
+const findLowestCommonAncestor = (nodeId1, nodeId2, nodes, edges) => {
+  const path1 = getPathToNode(nodeId1, nodes, edges);
+  const path2 = getPathToNode(nodeId2, nodes, edges);
+
+  const path1Ids = new Set(path1.map((n) => n.id));
+
+  // Walk path2 from node to root, find first match
+  for (let i = path2.length - 1; i >= 0; i--) {
+    if (path1Ids.has(path2[i].id)) {
+      return path2[i].id;
+    }
+  }
+
+  return "root";
+};
+
+// Get all descendants of a node
+const getDescendants = (nodeId, nodes, edges) => {
+  const descendants = [];
+  const queue = [nodeId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    const childEdges = edges.filter((e) => e.source === currentId);
+
+    for (const edge of childEdges) {
+      descendants.push(edge.target);
+      queue.push(edge.target);
+    }
+  }
+
+  return descendants;
+};
+
+const STORAGE_KEY = "bushchat-state";
+
+// Load state from localStorage
+const loadState = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error("Failed to load state:", e);
+  }
+  return null;
+};
+
+// Save state to localStorage
+const saveState = (nodes, edges, selectedNodeId, nodeIdCounter) => {
+  if (typeof window === "undefined") return;
+  try {
+    // Strip callbacks from nodes before saving
+    const nodesToSave = nodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        onAddBranch: undefined,
+        onEditNode: undefined,
+        onDeleteNode: undefined,
+        onMergeNode: undefined,
+        isMergeSource: undefined,
+      },
+    }));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        nodes: nodesToSave,
+        edges,
+        selectedNodeId,
+        nodeIdCounter,
+      })
+    );
+  } catch (e) {
+    console.error("Failed to save state:", e);
+  }
+};
+
 const TreeChatInner = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [selectedNodeId, setSelectedNodeId] = useState("root");
+  // Load initial state from localStorage or use defaults
+  const savedState = useMemo(() => loadState(), []);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(
+    savedState?.nodes || initialNodes
+  );
+  const [edges, setEdges, onEdgesChange] = useEdgesState(
+    savedState?.edges || initialEdges
+  );
+  const [selectedNodeId, setSelectedNodeId] = useState(
+    savedState?.selectedNodeId || "root"
+  );
   const [inputMessage, setInputMessage] = useState("");
   const [selectedModel, setSelectedModel] = useState(models[0]);
-  const nodeIdCounter = useRef(1);
+  const [mergeMode, setMergeMode] = useState(null);
+  const nodeIdCounter = useRef(savedState?.nodeIdCounter || 1);
   const { fitView } = useReactFlow();
+
+  // Auto-save to localStorage whenever nodes or edges change
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      saveState(nodes, edges, selectedNodeId, nodeIdCounter.current);
+    }, 500); // Debounce saves
+    return () => clearTimeout(timeoutId);
+  }, [nodes, edges, selectedNodeId]);
 
   // Get the selected node
   const selectedNode = useMemo(
@@ -268,16 +371,336 @@ const TreeChatInner = () => {
     document.getElementById("message-input")?.focus();
   }, []);
 
-  // Inject onAddBranch callback into all nodes
+  // Handle editing a node's user message (regenerates response)
+  const handleEditNode = useCallback(
+    async (nodeId, newUserMessage) => {
+      if (!newUserMessage.trim()) return;
+
+      // Update the user message
+      updateNodeData(nodeId, {
+        userMessage: newUserMessage,
+        assistantMessage: "",
+        status: "loading",
+        error: null,
+      });
+
+      // Get parent of this node
+      const parentEdge = edges.find((e) => e.target === nodeId);
+      const parentNodeId = parentEdge?.source || "root";
+
+      // Build conversation context from parent
+      const path = getPathToNode(parentNodeId, nodes, edges);
+      const conversationMessages = buildConversationFromPath(path);
+      conversationMessages.push({ role: "user", content: newUserMessage });
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: conversationMessages,
+            model: selectedModel,
+          }),
+        });
+
+        const contentType = response.headers.get("content-type");
+        const isStreaming = contentType?.includes("text/event-stream");
+
+        if (isStreaming) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let fullResponse = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk
+              .split("\n")
+              .filter((line) => line.startsWith("data: "));
+
+            for (const line of lines) {
+              const data = line.slice(6);
+              if (data === "[DONE]") continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) {
+                  fullResponse += parsed.content;
+                  updateNodeData(nodeId, {
+                    assistantMessage: fullResponse,
+                    status: "loading",
+                  });
+                }
+              } catch (e) {
+                // Skip malformed JSON
+              }
+            }
+          }
+
+          updateNodeData(nodeId, {
+            assistantMessage: fullResponse,
+            status: "complete",
+          });
+        } else {
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || "Failed to get response");
+          }
+          updateNodeData(nodeId, {
+            assistantMessage: data.response,
+            status: "complete",
+          });
+        }
+      } catch (error) {
+        console.error(error);
+        updateNodeData(nodeId, {
+          error: error.message,
+          status: "error",
+        });
+      }
+    },
+    [nodes, edges, selectedModel, updateNodeData]
+  );
+
+  // Handle deleting a node and its descendants
+  const handleDeleteNode = useCallback(
+    (nodeId) => {
+      if (nodeId === "root") return;
+
+      const descendants = getDescendants(nodeId, nodes, edges);
+      const nodesToRemove = new Set([nodeId, ...descendants]);
+
+      // Find parent to select after deletion
+      const parentEdge = edges.find((e) => e.target === nodeId);
+      const parentId = parentEdge?.source || "root";
+
+      setNodes((nds) => nds.filter((n) => !nodesToRemove.has(n.id)));
+      setEdges((eds) =>
+        eds.filter(
+          (e) => !nodesToRemove.has(e.source) && !nodesToRemove.has(e.target)
+        )
+      );
+
+      setSelectedNodeId(parentId);
+    },
+    [nodes, edges, setNodes, setEdges]
+  );
+
+  // Handle merge - first click selects first node, second click performs merge
+  const handleMergeNode = useCallback(
+    async (nodeId) => {
+      if (nodeId === "root") return;
+
+      if (!mergeMode) {
+        // First node selected - enter merge mode
+        setMergeMode({ firstNodeId: nodeId });
+        return;
+      }
+
+      if (mergeMode.firstNodeId === nodeId) {
+        // Same node clicked - cancel merge
+        setMergeMode(null);
+        return;
+      }
+
+      // Second node selected - perform merge
+      const firstNodeId = mergeMode.firstNodeId;
+      const secondNodeId = nodeId;
+
+      // Find lowest common ancestor
+      const lcaId = findLowestCommonAncestor(
+        firstNodeId,
+        secondNodeId,
+        nodes,
+        edges
+      );
+
+      // Get paths from LCA to each node (excluding LCA)
+      const path1 = getPathToNode(firstNodeId, nodes, edges);
+      const path2 = getPathToNode(secondNodeId, nodes, edges);
+
+      const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
+      const lcaIndex2 = path2.findIndex((n) => n.id === lcaId);
+
+      const branch1 = path1.slice(lcaIndex1 + 1);
+      const branch2 = path2.slice(lcaIndex2 + 1);
+
+      // Build merged context message
+      const lcaPath = path1.slice(0, lcaIndex1 + 1);
+      const baseContext = buildConversationFromPath(lcaPath);
+
+      // Build branch summaries
+      const branch1Messages = buildConversationFromPath(branch1);
+      const branch2Messages = buildConversationFromPath(branch2);
+
+      let mergedPrompt =
+        "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
+      mergedPrompt += "=== BRANCH A ===\n";
+      for (const msg of branch1Messages) {
+        mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+      }
+      mergedPrompt += "=== BRANCH B ===\n";
+      for (const msg of branch2Messages) {
+        mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+      }
+      mergedPrompt += "=== END BRANCHES ===\n\n";
+      mergedPrompt +=
+        "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
+
+      // Create a new merged node
+      const newNodeId = `node-${nodeIdCounter.current++}`;
+      const node1 = nodes.find((n) => n.id === firstNodeId);
+      const node2 = nodes.find((n) => n.id === secondNodeId);
+
+      const newNode = {
+        id: newNodeId,
+        type: "chatNode",
+        position: {
+          x: (node1.position.x + node2.position.x) / 2,
+          y: Math.max(node1.position.y, node2.position.y) + 200,
+        },
+        data: {
+          userMessage: "[Merged from two branches]",
+          assistantMessage: "",
+          status: "loading",
+          isRoot: false,
+        },
+      };
+
+      // Add node and edges from both parents
+      setNodes((nds) => [...nds, newNode]);
+      setEdges((eds) => [
+        ...eds,
+        {
+          id: `edge-${firstNodeId}-${newNodeId}`,
+          source: firstNodeId,
+          target: newNodeId,
+          type: "smoothstep",
+          style: { stroke: "#ff9800", strokeWidth: 2 },
+        },
+        {
+          id: `edge-${secondNodeId}-${newNodeId}`,
+          source: secondNodeId,
+          target: newNodeId,
+          type: "smoothstep",
+          style: { stroke: "#ff9800", strokeWidth: 2 },
+        },
+      ]);
+
+      setSelectedNodeId(newNodeId);
+      setMergeMode(null);
+
+      // Send merged context to API
+      const conversationMessages = [
+        ...baseContext,
+        { role: "user", content: mergedPrompt },
+      ];
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: conversationMessages,
+            model: selectedModel,
+          }),
+        });
+
+        const contentType = response.headers.get("content-type");
+        const isStreaming = contentType?.includes("text/event-stream");
+
+        if (isStreaming) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let fullResponse = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk
+              .split("\n")
+              .filter((line) => line.startsWith("data: "));
+
+            for (const line of lines) {
+              const data = line.slice(6);
+              if (data === "[DONE]") continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) {
+                  fullResponse += parsed.content;
+                  updateNodeData(newNodeId, {
+                    assistantMessage: fullResponse,
+                    status: "loading",
+                  });
+                }
+              } catch (e) {
+                // Skip malformed JSON
+              }
+            }
+          }
+
+          updateNodeData(newNodeId, {
+            assistantMessage: fullResponse,
+            status: "complete",
+          });
+        } else {
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || "Failed to get response");
+          }
+          updateNodeData(newNodeId, {
+            assistantMessage: data.response,
+            status: "complete",
+          });
+        }
+      } catch (error) {
+        console.error(error);
+        updateNodeData(newNodeId, {
+          error: error.message,
+          status: "error",
+        });
+      }
+
+      setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 100);
+    },
+    [
+      mergeMode,
+      nodes,
+      edges,
+      selectedModel,
+      setNodes,
+      setEdges,
+      updateNodeData,
+      fitView,
+    ]
+  );
+
+  // Inject callbacks into all nodes
   const nodesWithCallbacks = useMemo(() => {
     return nodes.map((node) => ({
       ...node,
       data: {
         ...node.data,
         onAddBranch: handleAddBranch,
+        onEditNode: handleEditNode,
+        onDeleteNode: handleDeleteNode,
+        onMergeNode: handleMergeNode,
+        isMergeSource: mergeMode?.firstNodeId === node.id,
       },
     }));
-  }, [nodes, handleAddBranch]);
+  }, [
+    nodes,
+    handleAddBranch,
+    handleEditNode,
+    handleDeleteNode,
+    handleMergeNode,
+    mergeMode,
+  ]);
 
   // Handle form submit
   const handleSubmit = (e) => {
@@ -307,6 +730,8 @@ const TreeChatInner = () => {
         maxZoom={2}
         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
         proOptions={{ hideAttribution: true }}
+        deleteKeyCode={null}
+        selectionKeyCode={null}
       >
         <Background color="#333" gap={20} />
         <Controls
@@ -403,21 +828,54 @@ const TreeChatInner = () => {
             sx={{
               p: 1.5,
               backgroundColor: "#2a2a2a",
-              border: "1px solid #444",
+              border: mergeMode ? "1px solid #ff9800" : "1px solid #444",
               borderRadius: 2,
-              maxWidth: 250,
+              maxWidth: 280,
             }}
           >
             <Typography variant="subtitle2" sx={{ color: "#4a9eff", mb: 0.5 }}>
               bushchat
             </Typography>
-            <Typography
-              variant="caption"
-              sx={{ color: "#888", display: "block" }}
-            >
-              Click (+) on any node to branch • Select node to continue
-              conversation
-            </Typography>
+            {mergeMode ? (
+              <>
+                <Typography
+                  variant="caption"
+                  sx={{ color: "#ff9800", display: "block", fontWeight: 500 }}
+                >
+                  🔀 Merge Mode Active
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{ color: "#888", display: "block", mt: 0.5 }}
+                >
+                  Click another node to merge, or click the same node to cancel
+                </Typography>
+                <Button
+                  size="small"
+                  onClick={() => setMergeMode(null)}
+                  sx={{
+                    mt: 1,
+                    color: "#ff9800",
+                    borderColor: "#ff9800",
+                    "&:hover": {
+                      borderColor: "#ffb74d",
+                      backgroundColor: "rgba(255,152,0,0.1)",
+                    },
+                  }}
+                  variant="outlined"
+                >
+                  Cancel Merge
+                </Button>
+              </>
+            ) : (
+              <Typography
+                variant="caption"
+                sx={{ color: "#888", display: "block" }}
+              >
+                Click (+) to branch • Edit/Delete on hover • Merge icon to
+                combine branches
+              </Typography>
+            )}
             {conversationHistory.length > 0 && (
               <Typography
                 variant="caption"

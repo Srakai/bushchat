@@ -1,14 +1,116 @@
 "use client";
 import React, { memo, useState } from "react";
 import { Handle, Position } from "reactflow";
-import { Box, Typography, IconButton, CircularProgress } from "@mui/material";
+import {
+  Box,
+  Typography,
+  IconButton,
+  CircularProgress,
+  Collapse,
+  TextField,
+  Tooltip,
+} from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import CheckIcon from "@mui/icons-material/Check";
+import CloseIcon from "@mui/icons-material/Close";
+import MergeIcon from "@mui/icons-material/CallMerge";
+
+const COLLAPSE_THRESHOLD = 500; // Characters before showing collapse option
+
+const CollapsibleText = ({ text, label, color }) => {
+  const [collapsed, setCollapsed] = useState(text?.length > COLLAPSE_THRESHOLD);
+  const shouldShowCollapse = text?.length > COLLAPSE_THRESHOLD;
+
+  const displayText = collapsed
+    ? text?.slice(0, COLLAPSE_THRESHOLD) + "..."
+    : text;
+
+  return (
+    <>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "#e0e0e0",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+        }}
+      >
+        {displayText}
+      </Typography>
+      {shouldShowCollapse && (
+        <Box
+          onClick={(e) => {
+            e.stopPropagation();
+            setCollapsed(!collapsed);
+          }}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 0.5,
+            mt: 0.5,
+            cursor: "pointer",
+            color: "#4a9eff",
+            "&:hover": { color: "#6ab4ff" },
+          }}
+        >
+          {collapsed ? (
+            <>
+              <ExpandMoreIcon sx={{ fontSize: 16 }} />
+              <Typography variant="caption">
+                Show more ({text.length} chars)
+              </Typography>
+            </>
+          ) : (
+            <>
+              <ExpandLessIcon sx={{ fontSize: 16 }} />
+              <Typography variant="caption">Show less</Typography>
+            </>
+          )}
+        </Box>
+      )}
+    </>
+  );
+};
 
 const ChatNode = ({ id, data, selected }) => {
   const [hovered, setHovered] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editUserMessage, setEditUserMessage] = useState("");
 
   const isLoading = data.status === "loading";
   const isRoot = data.isRoot;
+  const isMergeSource = data.isMergeSource;
+
+  const handleStartEdit = (e) => {
+    e.stopPropagation();
+    setEditUserMessage(data.userMessage || "");
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = (e) => {
+    e.stopPropagation();
+    data.onEditNode?.(id, editUserMessage);
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = (e) => {
+    e.stopPropagation();
+    setIsEditing(false);
+  };
+
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    data.onDeleteNode?.(id);
+  };
+
+  const handleMerge = (e) => {
+    e.stopPropagation();
+    data.onMergeNode?.(id);
+  };
 
   return (
     <Box
@@ -18,13 +120,17 @@ const ChatNode = ({ id, data, selected }) => {
         minWidth: 280,
         maxWidth: 400,
         backgroundColor: selected ? "#1e1e1e" : "#2a2a2a",
-        border: selected ? "2px solid #4a9eff" : "1px solid #444",
+        border: isMergeSource
+          ? "2px solid #ff9800"
+          : selected
+          ? "2px solid #4a9eff"
+          : "1px solid #444",
         borderRadius: 2,
         overflow: "hidden",
         cursor: "pointer",
         transition: "all 0.2s ease",
         "&:hover": {
-          borderColor: "#666",
+          borderColor: isMergeSource ? "#ffb74d" : "#666",
         },
       }}
     >
@@ -40,6 +146,66 @@ const ChatNode = ({ id, data, selected }) => {
             border: "none",
           }}
         />
+      )}
+
+      {/* Action buttons on hover */}
+      {(hovered || selected) && !isRoot && !isLoading && !isEditing && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: 4,
+            right: 4,
+            display: "flex",
+            gap: 0.5,
+            zIndex: 10,
+          }}
+        >
+          <Tooltip title="Edit message">
+            <IconButton
+              size="small"
+              onClick={handleStartEdit}
+              sx={{
+                backgroundColor: "#444",
+                color: "#fff",
+                width: 24,
+                height: 24,
+                "&:hover": { backgroundColor: "#555" },
+              }}
+            >
+              <EditIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Merge branches here">
+            <IconButton
+              size="small"
+              onClick={handleMerge}
+              sx={{
+                backgroundColor: "#444",
+                color: "#fff",
+                width: 24,
+                height: 24,
+                "&:hover": { backgroundColor: "#555" },
+              }}
+            >
+              <MergeIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete node">
+            <IconButton
+              size="small"
+              onClick={handleDelete}
+              sx={{
+                backgroundColor: "#662222",
+                color: "#fff",
+                width: 24,
+                height: 24,
+                "&:hover": { backgroundColor: "#882222" },
+              }}
+            >
+              <DeleteIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
       )}
 
       {/* User message */}
@@ -62,16 +228,73 @@ const ChatNode = ({ id, data, selected }) => {
           >
             You
           </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              color: "#e0e0e0",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-            }}
-          >
-            {data.userMessage}
-          </Typography>
+          {isEditing ? (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              <TextField
+                value={editUserMessage}
+                onChange={(e) => setEditUserMessage(e.target.value)}
+                multiline
+                minRows={2}
+                maxRows={6}
+                size="small"
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.metaKey) {
+                    handleSaveEdit(e);
+                  } else if (e.key === "Escape") {
+                    handleCancelEdit(e);
+                  }
+                }}
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    backgroundColor: "#1a1a1a",
+                    color: "#fff",
+                    fontSize: "0.875rem",
+                    "& fieldset": { borderColor: "#444" },
+                    "&:hover fieldset": { borderColor: "#666" },
+                    "&.Mui-focused fieldset": { borderColor: "#4a9eff" },
+                  },
+                }}
+              />
+              <Box
+                sx={{ display: "flex", gap: 0.5, justifyContent: "flex-end" }}
+              >
+                <IconButton
+                  size="small"
+                  onClick={handleCancelEdit}
+                  sx={{
+                    backgroundColor: "#444",
+                    color: "#fff",
+                    width: 24,
+                    height: 24,
+                    "&:hover": { backgroundColor: "#555" },
+                  }}
+                >
+                  <CloseIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={handleSaveEdit}
+                  sx={{
+                    backgroundColor: "#4a9eff",
+                    color: "#fff",
+                    width: 24,
+                    height: 24,
+                    "&:hover": { backgroundColor: "#3a8eef" },
+                  }}
+                >
+                  <CheckIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Box>
+            </Box>
+          ) : (
+            <CollapsibleText
+              text={data.userMessage}
+              label="You"
+              color="#8ab4f8"
+            />
+          )}
         </Box>
       )}
 
@@ -104,16 +327,11 @@ const ChatNode = ({ id, data, selected }) => {
             >
               Assistant
             </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "#e0e0e0",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {data.assistantMessage}
-            </Typography>
+            <CollapsibleText
+              text={data.assistantMessage}
+              label="Assistant"
+              color="#81c784"
+            />
           </>
         ) : data.error ? (
           <Typography variant="body2" sx={{ color: "#f44336" }}>
