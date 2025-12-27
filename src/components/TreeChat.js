@@ -546,6 +546,157 @@ const TreeChatInner = () => {
     async (nodeId, newUserMessage) => {
       if (!newUserMessage.trim()) return;
 
+      const node = nodes.find((n) => n.id === nodeId);
+      
+      // Check if this is a merged node
+      if (node?.data?.isMergedNode && node.data.mergeParents) {
+        // Handle merged node edit - use merge context
+        const [firstNodeId, secondNodeId] = node.data.mergeParents;
+        const lcaId = node.data.lcaId;
+
+        // Get the merge edges and their context modes
+        const edge1 = edges.find(
+          (e) => e.source === firstNodeId && e.target === nodeId
+        );
+        const edge2 = edges.find(
+          (e) => e.source === secondNodeId && e.target === nodeId
+        );
+
+        const contextMode1 = edge1?.data?.contextMode || CONTEXT_MODE.SINGLE;
+        const contextMode2 = edge2?.data?.contextMode || CONTEXT_MODE.SINGLE;
+
+        // Get paths from LCA to each node
+        const path1 = getPathToNode(firstNodeId, nodes, edges);
+        const path2 = getPathToNode(secondNodeId, nodes, edges);
+
+        const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
+        const lcaIndex2 = path2.findIndex((n) => n.id === lcaId);
+
+        // Get branch content based on context mode
+        let branch1, branch2;
+        if (contextMode1 === CONTEXT_MODE.FULL) {
+          branch1 = path1.slice(lcaIndex1 + 1);
+        } else {
+          const lastNode = path1[path1.length - 1];
+          branch1 = lastNode ? [lastNode] : [];
+        }
+
+        if (contextMode2 === CONTEXT_MODE.FULL) {
+          branch2 = path2.slice(lcaIndex2 + 1);
+        } else {
+          const lastNode = path2[path2.length - 1];
+          branch2 = lastNode ? [lastNode] : [];
+        }
+
+        // Build merged context
+        const lcaPath = path1.slice(0, lcaIndex1 + 1);
+        const baseContext = buildConversationFromPath(lcaPath);
+
+        const branch1Messages = buildConversationFromPath(branch1);
+        const branch2Messages = buildConversationFromPath(branch2);
+
+        const mode1Label =
+          contextMode1 === CONTEXT_MODE.FULL ? "full context" : "single message";
+        const mode2Label =
+          contextMode2 === CONTEXT_MODE.FULL ? "full context" : "single message";
+
+        let mergedContext =
+          "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
+        mergedContext += `=== BRANCH A (${mode1Label}) ===\n`;
+        for (const msg of branch1Messages) {
+          mergedContext += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+        }
+        mergedContext += `=== BRANCH B (${mode2Label}) ===\n`;
+        for (const msg of branch2Messages) {
+          mergedContext += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+        }
+        mergedContext += "=== END BRANCHES ===\n\n";
+        mergedContext += newUserMessage;
+
+        // Update the user message
+        updateNodeData(nodeId, {
+          userMessage: newUserMessage,
+          assistantMessage: "",
+          status: "loading",
+          error: null,
+        });
+
+        const conversationMessages = [
+          ...baseContext,
+          { role: "user", content: mergedContext },
+        ];
+
+        try {
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: conversationMessages,
+              model: selectedModel,
+            }),
+          });
+
+          const contentType = response.headers.get("content-type");
+          const isStreaming = contentType?.includes("text/event-stream");
+
+          if (isStreaming) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullResponse = "";
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value);
+              const lines = chunk
+                .split("\n")
+                .filter((line) => line.startsWith("data: "));
+
+              for (const line of lines) {
+                const data = line.slice(6);
+                if (data === "[DONE]") continue;
+
+                try {
+                  const parsed = JSON.parse(data);
+                  if (parsed.content) {
+                    fullResponse += parsed.content;
+                    updateNodeData(nodeId, {
+                      assistantMessage: fullResponse,
+                      status: "loading",
+                    });
+                  }
+                } catch (e) {
+                  // Skip malformed JSON
+                }
+              }
+            }
+
+            updateNodeData(nodeId, {
+              assistantMessage: fullResponse,
+              status: "complete",
+            });
+          } else {
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.error || "Failed to get response");
+            }
+            updateNodeData(nodeId, {
+              assistantMessage: data.response,
+              status: "complete",
+            });
+          }
+        } catch (error) {
+          console.error(error);
+          updateNodeData(nodeId, {
+            error: error.message,
+            status: "error",
+          });
+        }
+        return;
+      }
+
+      // Regular node edit - original logic
       // Update the user message
       updateNodeData(nodeId, {
         userMessage: newUserMessage,

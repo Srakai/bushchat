@@ -167,23 +167,21 @@ const ChatNode = ({ id, data, selected }) => {
             zIndex: 10,
           }}
         >
-          {!isMergedNode && (
-            <Tooltip title="Edit message">
-              <IconButton
-                size="small"
-                onClick={handleStartEdit}
-                sx={{
-                  backgroundColor: "#444",
-                  color: "#fff",
-                  width: 24,
-                  height: 24,
-                  "&:hover": { backgroundColor: "#555" },
-                }}
-              >
-                <EditIcon sx={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-          )}
+          <Tooltip title={isMergedNode ? "Edit merge prompt" : "Edit message"}>
+            <IconButton
+              size="small"
+              onClick={handleStartEdit}
+              sx={{
+                backgroundColor: "#444",
+                color: "#fff",
+                width: 24,
+                height: 24,
+                "&:hover": { backgroundColor: "#555" },
+              }}
+            >
+              <EditIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
           {isMergedNode && (
             <Tooltip title="Regenerate merge (respects edge context settings)">
               <IconButton
