@@ -32,12 +32,16 @@ import {
   ListItemButton,
   ListItemText,
   Divider,
+  Modal,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import SettingsIcon from "@mui/icons-material/Settings";
 import ChatNode from "./ChatNode";
 import MergeEdge, { CONTEXT_MODE } from "./MergeEdge";
 
@@ -275,6 +279,55 @@ const setActiveChatId = (chatId) => {
   localStorage.setItem(ACTIVE_CHAT_KEY, chatId);
 };
 
+const SETTINGS_KEY = "bushchat-settings";
+const API_KEY_STORAGE_KEY = "bushchat-api-key";
+
+// Load settings from localStorage
+const loadSettings = () => {
+  if (typeof window === "undefined")
+    return { apiKey: "", apiUrl: "", saveApiKey: false };
+  try {
+    const saved = localStorage.getItem(SETTINGS_KEY);
+    const savedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+    const settings = saved
+      ? JSON.parse(saved)
+      : { apiUrl: "", saveApiKey: false };
+    // Load API key separately if it was saved
+    if (savedApiKey && settings.saveApiKey) {
+      settings.apiKey = savedApiKey;
+    } else {
+      settings.apiKey = "";
+    }
+    return settings;
+  } catch (e) {
+    console.error("Failed to load settings:", e);
+  }
+  return { apiKey: "", apiUrl: "", saveApiKey: false };
+};
+
+// Save settings to localStorage
+const saveSettings = (settings, shouldSaveApiKey) => {
+  if (typeof window === "undefined") return;
+  try {
+    // Save non-sensitive settings
+    const settingsToSave = {
+      apiUrl: settings.apiUrl,
+      saveApiKey: shouldSaveApiKey,
+    };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsToSave));
+
+    // Handle API key separately
+    if (shouldSaveApiKey && settings.apiKey) {
+      localStorage.setItem(API_KEY_STORAGE_KEY, settings.apiKey);
+    } else {
+      // Explicitly remove API key when unchecked
+      localStorage.removeItem(API_KEY_STORAGE_KEY);
+    }
+  } catch (e) {
+    console.error("Failed to save settings:", e);
+  }
+};
+
 const TreeChatInner = () => {
   // Chat management state
   const [activeChatId, setActiveChatIdState] = useState(() =>
@@ -282,6 +335,15 @@ const TreeChatInner = () => {
   );
   const [chatsList, setChatsList] = useState(() => loadChatsList());
   const [chatsExpanded, setChatsExpanded] = useState(false);
+
+  // Settings state
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState(() => loadSettings());
+  const [tempSettings, setTempSettings] = useState({
+    apiKey: "",
+    apiUrl: "",
+    saveApiKey: false,
+  });
 
   // Load initial state from localStorage or use defaults
   const savedState = useMemo(() => loadChatState(activeChatId), [activeChatId]);
@@ -375,6 +437,19 @@ const TreeChatInner = () => {
     [chatsList, activeChatId, switchToChat]
   );
 
+  // Open settings modal
+  const handleOpenSettings = useCallback(() => {
+    setTempSettings({ ...settings });
+    setSettingsOpen(true);
+  }, [settings]);
+
+  // Save settings
+  const handleSaveSettings = useCallback(() => {
+    setSettings(tempSettings);
+    saveSettings(tempSettings, tempSettings.saveApiKey);
+    setSettingsOpen(false);
+  }, [tempSettings]);
+
   // Get the selected node
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedNodeId),
@@ -462,6 +537,8 @@ const TreeChatInner = () => {
           body: JSON.stringify({
             messages: conversationMessages,
             model: selectedModel,
+            apiKey: settings.apiKey || undefined,
+            apiUrl: settings.apiUrl || undefined,
           }),
         });
 
@@ -531,7 +608,16 @@ const TreeChatInner = () => {
       // Fit view after adding node
       setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 100);
     },
-    [nodes, edges, selectedModel, setNodes, setEdges, updateNodeData, fitView]
+    [
+      nodes,
+      edges,
+      selectedModel,
+      setNodes,
+      setEdges,
+      updateNodeData,
+      fitView,
+      settings,
+    ]
   );
 
   // Handle adding a branch from a node
@@ -547,7 +633,7 @@ const TreeChatInner = () => {
       if (!newUserMessage.trim()) return;
 
       const node = nodes.find((n) => n.id === nodeId);
-      
+
       // Check if this is a merged node
       if (node?.data?.isMergedNode && node.data.mergeParents) {
         // Handle merged node edit - use merge context
@@ -596,9 +682,13 @@ const TreeChatInner = () => {
         const branch2Messages = buildConversationFromPath(branch2);
 
         const mode1Label =
-          contextMode1 === CONTEXT_MODE.FULL ? "full context" : "single message";
+          contextMode1 === CONTEXT_MODE.FULL
+            ? "full context"
+            : "single message";
         const mode2Label =
-          contextMode2 === CONTEXT_MODE.FULL ? "full context" : "single message";
+          contextMode2 === CONTEXT_MODE.FULL
+            ? "full context"
+            : "single message";
 
         let mergedContext =
           "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
@@ -633,6 +723,8 @@ const TreeChatInner = () => {
             body: JSON.stringify({
               messages: conversationMessages,
               model: selectedModel,
+              apiKey: settings.apiKey || undefined,
+              apiUrl: settings.apiUrl || undefined,
             }),
           });
 
@@ -721,6 +813,8 @@ const TreeChatInner = () => {
           body: JSON.stringify({
             messages: conversationMessages,
             model: selectedModel,
+            apiKey: settings.apiKey || undefined,
+            apiUrl: settings.apiUrl || undefined,
           }),
         });
 
@@ -782,7 +876,7 @@ const TreeChatInner = () => {
         });
       }
     },
-    [nodes, edges, selectedModel, updateNodeData]
+    [nodes, edges, selectedModel, updateNodeData, settings]
   );
 
   // Handle deleting a node and its descendants
@@ -927,6 +1021,8 @@ const TreeChatInner = () => {
           body: JSON.stringify({
             messages: conversationMessages,
             model: selectedModel,
+            apiKey: settings.apiKey || undefined,
+            apiUrl: settings.apiUrl || undefined,
           }),
         });
 
@@ -988,7 +1084,7 @@ const TreeChatInner = () => {
         });
       }
     },
-    [nodes, edges, selectedModel, updateNodeData]
+    [nodes, edges, selectedModel, updateNodeData, settings]
   );
 
   // Handle merge - first click selects first node, second click performs merge
@@ -1123,6 +1219,8 @@ const TreeChatInner = () => {
           body: JSON.stringify({
             messages: conversationMessages,
             model: selectedModel,
+            apiKey: settings.apiKey || undefined,
+            apiUrl: settings.apiUrl || undefined,
           }),
         });
 
@@ -1195,6 +1293,7 @@ const TreeChatInner = () => {
       setEdges,
       updateNodeData,
       fitView,
+      settings,
     ]
   );
 
@@ -1361,59 +1460,73 @@ const TreeChatInner = () => {
               backgroundColor: "#2a2a2a",
               border: mergeMode ? "1px solid #ff9800" : "1px solid #444",
               borderRadius: 2,
-              minWidth: chatsExpanded ? 220 : "auto",
+              minWidth: 220,
               maxWidth: 280,
               overflow: "hidden",
             }}
           >
-            {/* Header with expand/collapse */}
+            {/* Header with settings */}
             <Box
-              onClick={() => setChatsExpanded(!chatsExpanded)}
               sx={{
                 p: 1.5,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                cursor: "pointer",
-                "&:hover": { backgroundColor: "#333" },
               }}
             >
               <Typography variant="subtitle2" sx={{ color: "#4a9eff" }}>
                 bushchat
               </Typography>
-              <IconButton size="small" sx={{ color: "#888", p: 0 }}>
-                {chatsExpanded ? (
-                  <ExpandLessIcon fontSize="small" />
-                ) : (
-                  <ExpandMoreIcon fontSize="small" />
-                )}
+              <IconButton
+                size="small"
+                onClick={handleOpenSettings}
+                sx={{ color: "#888", p: 0.5, "&:hover": { color: "#fff" } }}
+              >
+                <SettingsIcon fontSize="small" />
               </IconButton>
             </Box>
 
-            {/* Collapsible chats list */}
-            <Collapse in={chatsExpanded}>
-              <Divider sx={{ borderColor: "#444" }} />
-              <Box sx={{ p: 1 }}>
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    mb: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ color: "#888" }}>
-                    Chats
-                  </Typography>
+            <Divider sx={{ borderColor: "#444" }} />
+
+            {/* Collapsible Chats section */}
+            <Box sx={{ p: 1 }}>
+              <Box
+                onClick={() => setChatsExpanded(!chatsExpanded)}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  cursor: "pointer",
+                  py: 0.5,
+                  "&:hover": { backgroundColor: "#333" },
+                  borderRadius: 1,
+                  px: 0.5,
+                  mx: -0.5,
+                }}
+              >
+                <Typography variant="caption" sx={{ color: "#888" }}>
+                  Chats
+                </Typography>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                   <IconButton
                     size="small"
-                    onClick={createNewChat}
-                    sx={{ color: "#4a9eff", p: 0.5 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      createNewChat();
+                    }}
+                    sx={{ color: "#4a9eff", p: 0.25 }}
                   >
-                    <AddIcon fontSize="small" />
+                    <AddIcon sx={{ fontSize: 16 }} />
                   </IconButton>
+                  {chatsExpanded ? (
+                    <ExpandLessIcon sx={{ fontSize: 16, color: "#888" }} />
+                  ) : (
+                    <ExpandMoreIcon sx={{ fontSize: 16, color: "#888" }} />
+                  )}
                 </Box>
-                <List dense sx={{ py: 0, maxHeight: 200, overflow: "auto" }}>
+              </Box>
+              <Collapse in={chatsExpanded}>
+                <List dense sx={{ py: 0.5, maxHeight: 200, overflow: "auto" }}>
                   {chatsList.map((chat) => (
                     <ListItem
                       key={chat.id}
@@ -1464,70 +1577,186 @@ const TreeChatInner = () => {
                     </ListItem>
                   ))}
                 </List>
-              </Box>
-              <Divider sx={{ borderColor: "#444" }} />
-            </Collapse>
+              </Collapse>
+            </Box>
 
-            {/* Info section - only show when expanded or merge mode */}
-            {(chatsExpanded || mergeMode) && (
-              <Box sx={{ p: 1.5, pt: chatsExpanded ? 1 : 1.5 }}>
-                {mergeMode ? (
-                  <>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: "#ff9800",
-                        display: "block",
-                        fontWeight: 500,
-                      }}
-                    >
-                      🔀 Merge Mode Active
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{ color: "#888", display: "block", mt: 0.5 }}
-                    >
-                      Click another node to merge, or click the same node to
-                      cancel
-                    </Typography>
-                    <Button
-                      size="small"
-                      onClick={() => setMergeMode(null)}
-                      sx={{
-                        mt: 1,
-                        color: "#ff9800",
-                        borderColor: "#ff9800",
-                        "&:hover": {
-                          borderColor: "#ffb74d",
-                          backgroundColor: "rgba(255,152,0,0.1)",
-                        },
-                      }}
-                      variant="outlined"
-                    >
-                      Cancel Merge
-                    </Button>
-                  </>
-                ) : (
+            <Divider sx={{ borderColor: "#444" }} />
+
+            {/* Info section - always visible */}
+            <Box sx={{ p: 1.5 }}>
+              {mergeMode ? (
+                <>
                   <Typography
                     variant="caption"
-                    sx={{ color: "#888", display: "block" }}
+                    sx={{
+                      color: "#ff9800",
+                      display: "block",
+                      fontWeight: 500,
+                    }}
                   >
-                    Click (+) to branch • Edit/Delete on hover • Merge icon to
-                    combine branches
+                    🔀 Merge Mode Active
                   </Typography>
-                )}
-                {conversationHistory.length > 0 && (
                   <Typography
                     variant="caption"
-                    sx={{ color: "#666", display: "block", mt: 1 }}
+                    sx={{ color: "#888", display: "block", mt: 0.5 }}
                   >
-                    Context: {conversationHistory.length} messages
+                    Click another node to merge, or click the same node to
+                    cancel
                   </Typography>
-                )}
-              </Box>
-            )}
+                  <Button
+                    size="small"
+                    onClick={() => setMergeMode(null)}
+                    sx={{
+                      mt: 1,
+                      color: "#ff9800",
+                      borderColor: "#ff9800",
+                      "&:hover": {
+                        borderColor: "#ffb74d",
+                        backgroundColor: "rgba(255,152,0,0.1)",
+                      },
+                    }}
+                    variant="outlined"
+                  >
+                    Cancel Merge
+                  </Button>
+                </>
+              ) : (
+                <Typography
+                  variant="caption"
+                  sx={{ color: "#888", display: "block" }}
+                >
+                  (+) branch • Edit/Delete on hover • Merge icon to combine
+                </Typography>
+              )}
+              {conversationHistory.length > 0 && (
+                <Typography
+                  variant="caption"
+                  sx={{ color: "#666", display: "block", mt: 0.5 }}
+                >
+                  Context: {conversationHistory.length} messages
+                </Typography>
+              )}
+            </Box>
           </Paper>
         </Panel>
+
+        {/* Settings Modal */}
+        <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)}>
+          <Paper
+            sx={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              backgroundColor: "#2a2a2a",
+              border: "1px solid #444",
+              borderRadius: 2,
+              p: 3,
+              minWidth: 400,
+              maxWidth: 500,
+            }}
+          >
+            <Typography variant="h6" sx={{ color: "#fff", mb: 2 }}>
+              Settings
+            </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <TextField
+                label="API Key"
+                type="password"
+                value={tempSettings.apiKey}
+                onChange={(e) =>
+                  setTempSettings({ ...tempSettings, apiKey: e.target.value })
+                }
+                placeholder="sk-... (leave empty to use server .env)"
+                fullWidth
+                size="small"
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    backgroundColor: "#1a1a1a",
+                    color: "#fff",
+                    "& fieldset": { borderColor: "#444" },
+                    "&:hover fieldset": { borderColor: "#666" },
+                    "&.Mui-focused fieldset": { borderColor: "#4a9eff" },
+                  },
+                  "& .MuiInputLabel-root": { color: "#888" },
+                  "& .MuiInputLabel-root.Mui-focused": { color: "#4a9eff" },
+                }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={tempSettings.saveApiKey}
+                    onChange={(e) =>
+                      setTempSettings({
+                        ...tempSettings,
+                        saveApiKey: e.target.checked,
+                      })
+                    }
+                    sx={{
+                      color: "#888",
+                      "&.Mui-checked": { color: "#4a9eff" },
+                    }}
+                  />
+                }
+                label={
+                  <Typography variant="body2" sx={{ color: "#aaa" }}>
+                    🙈 Save API key in browser storage
+                  </Typography>
+                }
+              />
+              <TextField
+                label="OpenAI Compatible URL"
+                value={tempSettings.apiUrl}
+                onChange={(e) =>
+                  setTempSettings({ ...tempSettings, apiUrl: e.target.value })
+                }
+                placeholder="https://api.openai.com/v1 (leave empty for default)"
+                fullWidth
+                size="small"
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    backgroundColor: "#1a1a1a",
+                    color: "#fff",
+                    "& fieldset": { borderColor: "#444" },
+                    "&:hover fieldset": { borderColor: "#666" },
+                    "&.Mui-focused fieldset": { borderColor: "#4a9eff" },
+                  },
+                  "& .MuiInputLabel-root": { color: "#888" },
+                  "& .MuiInputLabel-root.Mui-focused": { color: "#4a9eff" },
+                }}
+              />
+              <Typography variant="caption" sx={{ color: "#666" }}>
+                These settings override the server .env configuration. Leave
+                empty to use server defaults.
+              </Typography>
+              <Box
+                sx={{
+                  display: "flex",
+                  gap: 1,
+                  justifyContent: "flex-end",
+                  mt: 1,
+                }}
+              >
+                <Button
+                  onClick={() => setSettingsOpen(false)}
+                  sx={{ color: "#888" }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveSettings}
+                  variant="contained"
+                  sx={{
+                    backgroundColor: "#4a9eff",
+                    "&:hover": { backgroundColor: "#3a8eef" },
+                  }}
+                >
+                  Save
+                </Button>
+              </Box>
+            </Box>
+          </Paper>
+        </Modal>
       </ReactFlow>
     </Box>
   );

@@ -1,22 +1,32 @@
 import { NextResponse } from "next/server";
 
 export async function POST(request) {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "OpenAI API key not configured" },
-      { status: 500 }
-    );
-  }
-
   try {
-    const { messages, model } = await request.json();
+    const {
+      messages,
+      model,
+      apiKey: clientApiKey,
+      apiUrl: clientApiUrl,
+    } = await request.json();
+
+    // Use client-provided settings or fall back to env
+    const apiKey = clientApiKey || process.env.OPENAI_API_KEY;
+    const apiUrl = clientApiUrl || "https://api.openai.com/v1";
+
+    if (!apiKey) {
+      return NextResponse.json(
+        {
+          error:
+            "OpenAI API key not configured. Set it in settings or server .env",
+        },
+        { status: 500 }
+      );
+    }
 
     // Check if model supports streaming (o1 models don't support streaming)
     const supportsStreaming = !model.startsWith("o1");
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(`${apiUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
