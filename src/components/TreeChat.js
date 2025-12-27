@@ -42,10 +42,11 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SettingsIcon from "@mui/icons-material/Settings";
+import SyncIcon from "@mui/icons-material/Sync";
 import ChatNode from "./ChatNode";
 import MergeEdge, { CONTEXT_MODE } from "./MergeEdge";
 
-const models = [
+const defaultModels = [
   "chatgpt-4o-latest",
   "gpt-4o",
   "gpt-4o-mini",
@@ -358,7 +359,9 @@ const TreeChatInner = () => {
     savedState?.selectedNodeId || "root"
   );
   const [inputMessage, setInputMessage] = useState("");
-  const [selectedModel, setSelectedModel] = useState(models[0]);
+  const [selectedModel, setSelectedModel] = useState(defaultModels[0]);
+  const [modelsList, setModelsList] = useState(defaultModels);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [mergeMode, setMergeMode] = useState(null);
   const nodeIdCounter = useRef(savedState?.nodeIdCounter || 1);
   const { fitView } = useReactFlow();
@@ -449,6 +452,56 @@ const TreeChatInner = () => {
     saveSettings(tempSettings, tempSettings.saveApiKey);
     setSettingsOpen(false);
   }, [tempSettings]);
+
+  // Fetch models from API (can use tempSettings for modal or settings for auto-load)
+  const fetchModelsWithConfig = useCallback(async (apiKey, apiUrl) => {
+    setIsLoadingModels(true);
+    try {
+      const url = apiUrl || "https://api.openai.com/v1";
+      
+      const response = await fetch(`${url}/models`, {
+        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch models");
+      }
+      
+      const data = await response.json();
+      const fetchedModels = data.data
+        ?.map((m) => m.id)
+        ?.filter((id) => id && !id.includes("embedding") && !id.includes("whisper") && !id.includes("tts") && !id.includes("dall-e"))
+        ?.sort() || [];
+      
+      if (fetchedModels.length > 0) {
+        setModelsList(fetchedModels);
+        // If current model not in list, select first one
+        setSelectedModel((current) => 
+          fetchedModels.includes(current) ? current : fetchedModels[0]
+        );
+      }
+    } catch (error) {
+      console.error("Failed to fetch models:", error);
+      // Keep existing models list on error
+    } finally {
+      setIsLoadingModels(false);
+    }
+  }, []);
+
+  // Wrapper for modal button (uses tempSettings)
+  const fetchModels = useCallback(() => {
+    fetchModelsWithConfig(tempSettings.apiKey, tempSettings.apiUrl);
+  }, [tempSettings, fetchModelsWithConfig]);
+
+  // Auto-fetch models on startup if API key is configured
+  const initialFetchDone = useRef(false);
+  useEffect(() => {
+    // Fetch if we have an API key OR a custom URL (local LLMs often don't need auth)
+    if (!initialFetchDone.current && (settings.apiKey || settings.apiUrl)) {
+      initialFetchDone.current = true;
+      fetchModelsWithConfig(settings.apiKey, settings.apiUrl);
+    }
+  }, [settings.apiKey, settings.apiUrl, fetchModelsWithConfig]);
 
   // Get the selected node
   const selectedNode = useMemo(
@@ -1403,6 +1456,8 @@ const TreeChatInner = () => {
               onChange={(e) => setInputMessage(e.target.value)}
               fullWidth
               autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
               sx={{
                 "& .MuiOutlinedInput-root": {
                   backgroundColor: "#1a1a1a",
@@ -1431,7 +1486,7 @@ const TreeChatInner = () => {
                   "& .MuiSvgIcon-root": { color: "#888" },
                 }}
               >
-                {models.map((model) => (
+                {modelsList.map((model) => (
                   <MenuItem key={model} value={model}>
                     {model}
                   </MenuItem>
@@ -1670,6 +1725,9 @@ const TreeChatInner = () => {
                 placeholder="sk-... (leave empty to use server .env)"
                 fullWidth
                 size="small"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 sx={{
                   "& .MuiOutlinedInput-root": {
                     backgroundColor: "#1a1a1a",
@@ -1704,27 +1762,55 @@ const TreeChatInner = () => {
                   </Typography>
                 }
               />
-              <TextField
-                label="OpenAI Compatible URL"
-                value={tempSettings.apiUrl}
-                onChange={(e) =>
-                  setTempSettings({ ...tempSettings, apiUrl: e.target.value })
-                }
-                placeholder="https://api.openai.com/v1 (leave empty for default)"
-                fullWidth
-                size="small"
-                sx={{
-                  "& .MuiOutlinedInput-root": {
-                    backgroundColor: "#1a1a1a",
-                    color: "#fff",
-                    "& fieldset": { borderColor: "#444" },
-                    "&:hover fieldset": { borderColor: "#666" },
-                    "&.Mui-focused fieldset": { borderColor: "#4a9eff" },
-                  },
-                  "& .MuiInputLabel-root": { color: "#888" },
-                  "& .MuiInputLabel-root.Mui-focused": { color: "#4a9eff" },
-                }}
-              />
+              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                <TextField
+                  label="OpenAI Compatible URL"
+                  value={tempSettings.apiUrl}
+                  onChange={(e) =>
+                    setTempSettings({ ...tempSettings, apiUrl: e.target.value })
+                  }
+                  placeholder="https://api.openai.com/v1 (leave empty for default)"
+                  fullWidth
+                  size="small"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      backgroundColor: "#1a1a1a",
+                      color: "#fff",
+                      "& fieldset": { borderColor: "#444" },
+                      "&:hover fieldset": { borderColor: "#666" },
+                      "&.Mui-focused fieldset": { borderColor: "#4a9eff" },
+                    },
+                    "& .MuiInputLabel-root": { color: "#888" },
+                    "& .MuiInputLabel-root.Mui-focused": { color: "#4a9eff" },
+                  }}
+                />
+                <IconButton
+                  onClick={fetchModels}
+                  disabled={isLoadingModels}
+                  sx={{
+                    mt: 0.5,
+                    color: "#4a9eff",
+                    "&:hover": { backgroundColor: "rgba(74, 158, 255, 0.1)" },
+                    "&.Mui-disabled": { color: "#666" },
+                    animation: isLoadingModels ? "spin 1s linear infinite" : "none",
+                    "@keyframes spin": {
+                      "0%": { transform: "rotate(0deg)" },
+                      "100%": { transform: "rotate(360deg)" },
+                    },
+                  }}
+                  title="Fetch models from API"
+                >
+                  <SyncIcon />
+                </IconButton>
+              </Box>
+              {modelsList.length > 0 && modelsList !== defaultModels && (
+                <Typography variant="caption" sx={{ color: "#4a9eff" }}>
+                  ✓ Loaded {modelsList.length} models from provider
+                </Typography>
+              )}
               <Typography variant="caption" sx={{ color: "#666" }}>
                 These settings override the server .env configuration. Leave
                 empty to use server defaults.
