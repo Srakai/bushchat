@@ -151,11 +151,14 @@ const CHATS_KEY = "bushchat-chats";
 const ACTIVE_CHAT_KEY = "bushchat-active-chat";
 
 // Generate unique chat ID
-const generateChatId = () => `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+const generateChatId = () =>
+  `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 // Get chat name from nodes (first non-root user message or "New Chat")
 const getChatName = (nodes) => {
-  const firstUserNode = nodes.find(n => !n.data?.isRoot && n.data?.userMessage);
+  const firstUserNode = nodes.find(
+    (n) => !n.data?.isRoot && n.data?.userMessage
+  );
   if (firstUserNode?.data?.userMessage) {
     const msg = firstUserNode.data.userMessage;
     return msg.length > 30 ? msg.substring(0, 30) + "..." : msg;
@@ -229,7 +232,7 @@ const saveChatState = (chatId, nodes, edges, selectedNodeId, nodeIdCounter) => {
     );
     // Also update chat name in list
     const chatsList = loadChatsList();
-    const chatIndex = chatsList.findIndex(c => c.id === chatId);
+    const chatIndex = chatsList.findIndex((c) => c.id === chatId);
     if (chatIndex >= 0) {
       chatsList[chatIndex].name = getChatName(nodesToSave);
       chatsList[chatIndex].updatedAt = Date.now();
@@ -249,7 +252,14 @@ const getActiveChatId = () => {
       // Create initial chat
       activeId = generateChatId();
       localStorage.setItem(ACTIVE_CHAT_KEY, activeId);
-      const chatsList = [{ id: activeId, name: "New Chat", createdAt: Date.now(), updatedAt: Date.now() }];
+      const chatsList = [
+        {
+          id: activeId,
+          name: "New Chat",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+      ];
       saveChatsList(chatsList);
     }
     return activeId;
@@ -267,7 +277,9 @@ const setActiveChatId = (chatId) => {
 
 const TreeChatInner = () => {
   // Chat management state
-  const [activeChatId, setActiveChatIdState] = useState(() => getActiveChatId());
+  const [activeChatId, setActiveChatIdState] = useState(() =>
+    getActiveChatId()
+  );
   const [chatsList, setChatsList] = useState(() => loadChatsList());
   const [chatsExpanded, setChatsExpanded] = useState(false);
 
@@ -292,36 +304,50 @@ const TreeChatInner = () => {
   // Auto-save to localStorage whenever nodes or edges change
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      saveChatState(activeChatId, nodes, edges, selectedNodeId, nodeIdCounter.current);
+      saveChatState(
+        activeChatId,
+        nodes,
+        edges,
+        selectedNodeId,
+        nodeIdCounter.current
+      );
       setChatsList(loadChatsList()); // Refresh list to get updated names
     }, 500); // Debounce saves
     return () => clearTimeout(timeoutId);
   }, [nodes, edges, selectedNodeId, activeChatId]);
 
   // Switch to a different chat
-  const switchToChat = useCallback((chatId) => {
-    setActiveChatId(chatId);
-    setActiveChatIdState(chatId);
-    const chatState = loadChatState(chatId);
-    if (chatState) {
-      setNodes(chatState.nodes || initialNodes);
-      setEdges(chatState.edges || initialEdges);
-      setSelectedNodeId(chatState.selectedNodeId || "root");
-      nodeIdCounter.current = chatState.nodeIdCounter || 1;
-    } else {
-      setNodes(initialNodes);
-      setEdges(initialEdges);
-      setSelectedNodeId("root");
-      nodeIdCounter.current = 1;
-    }
-    setMergeMode(null);
-    setTimeout(() => fitView({ padding: 0.2 }), 100);
-  }, [setNodes, setEdges, fitView]);
+  const switchToChat = useCallback(
+    (chatId) => {
+      setActiveChatId(chatId);
+      setActiveChatIdState(chatId);
+      const chatState = loadChatState(chatId);
+      if (chatState) {
+        setNodes(chatState.nodes || initialNodes);
+        setEdges(chatState.edges || initialEdges);
+        setSelectedNodeId(chatState.selectedNodeId || "root");
+        nodeIdCounter.current = chatState.nodeIdCounter || 1;
+      } else {
+        setNodes(initialNodes);
+        setEdges(initialEdges);
+        setSelectedNodeId("root");
+        nodeIdCounter.current = 1;
+      }
+      setMergeMode(null);
+      setTimeout(() => fitView({ padding: 0.2 }), 100);
+    },
+    [setNodes, setEdges, fitView]
+  );
 
   // Create a new chat
   const createNewChat = useCallback(() => {
     const newChatId = generateChatId();
-    const newChat = { id: newChatId, name: "New Chat", createdAt: Date.now(), updatedAt: Date.now() };
+    const newChat = {
+      id: newChatId,
+      name: "New Chat",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
     const updatedList = [newChat, ...chatsList];
     saveChatsList(updatedList);
     setChatsList(updatedList);
@@ -329,22 +355,25 @@ const TreeChatInner = () => {
   }, [chatsList, switchToChat]);
 
   // Delete a chat
-  const deleteChat = useCallback((chatId, e) => {
-    e.stopPropagation();
-    if (chatsList.length <= 1) return; // Don't delete last chat
-    
-    const updatedList = chatsList.filter(c => c.id !== chatId);
-    saveChatsList(updatedList);
-    setChatsList(updatedList);
-    
-    // Remove chat data
-    localStorage.removeItem(`bushchat-${chatId}`);
-    
-    // If deleting active chat, switch to first available
-    if (chatId === activeChatId && updatedList.length > 0) {
-      switchToChat(updatedList[0].id);
-    }
-  }, [chatsList, activeChatId, switchToChat]);
+  const deleteChat = useCallback(
+    (chatId, e) => {
+      e.stopPropagation();
+      if (chatsList.length <= 1) return; // Don't delete last chat
+
+      const updatedList = chatsList.filter((c) => c.id !== chatId);
+      saveChatsList(updatedList);
+      setChatsList(updatedList);
+
+      // Remove chat data
+      localStorage.removeItem(`bushchat-${chatId}`);
+
+      // If deleting active chat, switch to first available
+      if (chatId === activeChatId && updatedList.length > 0) {
+        switchToChat(updatedList[0].id);
+      }
+    },
+    [chatsList, activeChatId, switchToChat]
+  );
 
   // Get the selected node
   const selectedNode = useMemo(
@@ -1202,7 +1231,11 @@ const TreeChatInner = () => {
                 bushchat
               </Typography>
               <IconButton size="small" sx={{ color: "#888", p: 0 }}>
-                {chatsExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                {chatsExpanded ? (
+                  <ExpandLessIcon fontSize="small" />
+                ) : (
+                  <ExpandMoreIcon fontSize="small" />
+                )}
               </IconButton>
             </Box>
 
@@ -1210,7 +1243,14 @@ const TreeChatInner = () => {
             <Collapse in={chatsExpanded}>
               <Divider sx={{ borderColor: "#444" }} />
               <Box sx={{ p: 1 }}>
-                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    mb: 0.5,
+                  }}
+                >
                   <Typography variant="caption" sx={{ color: "#888" }}>
                     Chats
                   </Typography>
@@ -1233,7 +1273,11 @@ const TreeChatInner = () => {
                             edge="end"
                             size="small"
                             onClick={(e) => deleteChat(chat.id, e)}
-                            sx={{ color: "#666", "&:hover": { color: "#f44" }, p: 0.5 }}
+                            sx={{
+                              color: "#666",
+                              "&:hover": { color: "#f44" },
+                              p: 0.5,
+                            }}
                           >
                             <DeleteOutlineIcon fontSize="small" />
                           </IconButton>
@@ -1280,7 +1324,11 @@ const TreeChatInner = () => {
                   <>
                     <Typography
                       variant="caption"
-                      sx={{ color: "#ff9800", display: "block", fontWeight: 500 }}
+                      sx={{
+                        color: "#ff9800",
+                        display: "block",
+                        fontWeight: 500,
+                      }}
                     >
                       🔀 Merge Mode Active
                     </Typography>
@@ -1288,7 +1336,8 @@ const TreeChatInner = () => {
                       variant="caption"
                       sx={{ color: "#888", display: "block", mt: 0.5 }}
                     >
-                      Click another node to merge, or click the same node to cancel
+                      Click another node to merge, or click the same node to
+                      cancel
                     </Typography>
                     <Button
                       size="small"
