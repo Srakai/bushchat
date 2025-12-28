@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "predeploy": "npm run build",
-    "deploy": "touch ./out/.nojekyll && echo 'bushchat.xyz' > ./out/CNAME && gh-pages -d out"
+    "deploy": "touch ./out/.nojekyll && echo 'bushchat.xyz' > ./out/CNAME && gh-pages -d out -t"
   },
   "dependencies": {
     "@emotion/react": "^11.11.4",

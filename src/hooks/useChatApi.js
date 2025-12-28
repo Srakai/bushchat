@@ -1,11 +1,14 @@
 /**
  * Custom hook for handling chat API calls with streaming support
+ * Calls OpenAI-compatible APIs directly from the client (works with static hosting like GitHub Pages)
  */
 
 import { useCallback } from "react";
 
+const DEFAULT_API_URL = "https://api.openai.com/v1";
+
 /**
- * Parse and process streaming response from the chat API
+ * Parse and process streaming response from OpenAI API
  */
 const processStreamingResponse = async (
   response,
@@ -23,22 +26,23 @@ const processStreamingResponse = async (
       if (done) break;
 
       const chunk = decoder.decode(value);
-      const lines = chunk
-        .split("\n")
-        .filter((line) => line.startsWith("data: "));
+      const lines = chunk.split("\n").filter((line) => line.trim() !== "");
 
       for (const line of lines) {
-        const data = line.slice(6);
-        if (data === "[DONE]") continue;
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6);
+          if (data === "[DONE]") continue;
 
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.content) {
-            fullResponse += parsed.content;
-            onChunk(fullResponse);
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content || "";
+            if (content) {
+              fullResponse += content;
+              onChunk(fullResponse);
+            }
+          } catch (e) {
+            // Skip malformed JSON
           }
-        } catch (e) {
-          // Skip malformed JSON
         }
       }
     }
@@ -50,27 +54,50 @@ const processStreamingResponse = async (
 };
 
 /**
- * Hook for making chat API requests with streaming support
+ * Hook for making chat API requests directly to OpenAI-compatible APIs
+ * Works with static hosting (GitHub Pages) - no backend required
  */
 export const useChatApi = (settings) => {
   const sendChatRequest = useCallback(
     async (messages, model, onChunk, onComplete, onError) => {
+      const apiKey = settings.apiKey;
+      const apiUrl = settings.apiUrl || DEFAULT_API_URL;
+
+      if (!apiKey) {
+        onError(
+          new Error(
+            "API key not configured. Please add your OpenAI API key in Settings."
+          )
+        );
+        return;
+      }
+
+      // Check if model supports streaming (o1 models don't support streaming)
+      const supportsStreaming = !model.startsWith("o1");
+
       try {
-        const response = await fetch("/api/chat", {
+        const response = await fetch(`${apiUrl}/chat/completions`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
           body: JSON.stringify({
-            messages,
             model,
-            apiKey: settings.apiKey || undefined,
-            apiUrl: settings.apiUrl || undefined,
+            messages,
+            max_tokens: 4000,
+            stream: supportsStreaming,
           }),
         });
 
-        const contentType = response.headers.get("content-type");
-        const isStreaming = contentType?.includes("text/event-stream");
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.error?.message || `API error: ${response.status}`
+          );
+        }
 
-        if (isStreaming) {
+        if (supportsStreaming) {
           await processStreamingResponse(
             response,
             onChunk,
@@ -78,11 +105,10 @@ export const useChatApi = (settings) => {
             onError
           );
         } else {
+          // Non-streaming response (for o1 models)
           const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.error || "Failed to get response");
-          }
-          onComplete(data.response);
+          const responseText = data.choices?.[0]?.message?.content || "";
+          onComplete(responseText);
         }
       } catch (error) {
         onError(error);

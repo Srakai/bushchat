@@ -104,7 +104,7 @@ const SettingsModal = ({
             onChange={(e) =>
               setTempSettings({ ...tempSettings, apiKey: e.target.value })
             }
-            placeholder="sk-... (leave empty to use server .env)"
+            placeholder="sk-... (required)"
             fullWidth
             size="small"
             autoComplete="off"
@@ -171,8 +171,8 @@ const SettingsModal = ({
             </Typography>
           )}
           <Typography variant="caption" sx={typography.dim}>
-            These settings override the server .env configuration. Leave empty
-            to use server defaults.
+            Your API key is stored locally in your browser and sent directly to
+            OpenAI. We never see or store your key on any server.
           </Typography>
           <Box
             sx={{
