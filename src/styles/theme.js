@@ -47,7 +47,7 @@ export const components = {
   // Text field styling for MUI TextField
   textField: {
     "& .MuiOutlinedInput-root": {
-      backgroundColor: colors.bg.input,
+      backgroundColor: "transparent",
       color: colors.text.primary,
       "& fieldset": { borderColor: colors.border.secondary },
       "&:hover fieldset": { borderColor: colors.border.primary },
@@ -59,7 +59,7 @@ export const components = {
   // Text field with label
   textFieldWithLabel: {
     "& .MuiOutlinedInput-root": {
-      backgroundColor: colors.bg.input,
+      backgroundColor: "transparent",
       color: colors.text.primary,
       "& fieldset": { borderColor: colors.border.secondary },
       "&:hover fieldset": { borderColor: colors.border.primary },
@@ -71,7 +71,7 @@ export const components = {
 
   // Select dropdown styling
   select: {
-    backgroundColor: colors.bg.input,
+    backgroundColor: "transparent",
     color: colors.text.primary,
     "& .MuiOutlinedInput-notchedOutline": {
       borderColor: colors.border.secondary,
@@ -106,9 +106,9 @@ export const components = {
 
   // Primary action button (blue)
   buttonPrimary: {
-    backgroundColor: colors.button.primary,
+    backgroundColor: "transparent",
     color: colors.text.primary,
-    "&:hover": { backgroundColor: colors.button.primaryHover },
+    "&:hover": { backgroundColor: "rgba(74, 158, 255, 0.1)" },
     "&.Mui-disabled": {
       backgroundColor: colors.button.disabled,
       color: colors.button.disabledText,

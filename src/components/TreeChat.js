@@ -1441,7 +1441,7 @@ const TreeChatInner = () => {
       sx={{
         width: "100vw",
         height: "100vh",
-        backgroundColor: colors.bg.primary,
+        backgroundColor: "#252627",
       }}
     >
       <ReactFlow
@@ -1460,7 +1460,7 @@ const TreeChatInner = () => {
         deleteKeyCode={null}
         selectionKeyCode={null}
       >
-        <Background color={colors.border.secondary} gap={20} />
+        <Background color="#888888" gap={20} />
         <Controls
           style={{
             backgroundColor: colors.bg.secondary,
