@@ -250,11 +250,13 @@ const ChatNode = ({ id, data, selected }) => {
                 autoFocus
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && e.metaKey) {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
                     handleSaveEdit(e);
                   } else if (e.key === "Escape") {
                     handleCancelEdit(e);
                   }
+                  // Shift+Enter allows default behavior (new line)
                 }}
                 sx={{
                   ...components.textField,
