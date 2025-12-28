@@ -43,6 +43,7 @@ const InputPanel = ({
     >
       <TextField
         id="message-input"
+        className="ph-no-capture"
         placeholder={
           isRootSelected
             ? "Start a new conversation..."

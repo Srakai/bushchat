@@ -34,6 +34,7 @@ const CollapsibleText = ({ text }) => {
     <>
       <Typography
         variant="body2"
+        className="ph-no-capture"
         sx={{
           color: colors.text.primary,
           whiteSpace: "pre-wrap",
@@ -241,6 +242,7 @@ const ChatNode = ({ id, data, selected }) => {
               <TextField
                 value={editUserMessage}
                 onChange={(e) => setEditUserMessage(e.target.value)}
+                className="ph-no-capture"
                 multiline
                 minRows={2}
                 maxRows={6}

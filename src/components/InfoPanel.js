@@ -145,6 +145,7 @@ const InfoPanel = ({
                 >
                   <ListItemText
                     primary={chat.name}
+                    className="ph-no-capture"
                     primaryTypographyProps={{
                       variant: "caption",
                       sx: {

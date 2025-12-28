@@ -100,6 +100,7 @@ const SettingsModal = ({
           <TextField
             label="API Key"
             type="password"
+            className="ph-no-capture"
             value={tempSettings.apiKey}
             onChange={(e) =>
               setTempSettings({ ...tempSettings, apiKey: e.target.value })
@@ -134,6 +135,7 @@ const SettingsModal = ({
           <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
             <TextField
               label="OpenAI Compatible URL"
+              className="ph-no-capture"
               value={tempSettings.apiUrl}
               onChange={(e) =>
                 setTempSettings({ ...tempSettings, apiUrl: e.target.value })
