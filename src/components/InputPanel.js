@@ -45,6 +45,8 @@ const InputPanel = ({
     }
     // Escape cancels pending merge
     if (e.key === "Escape" && isPendingMerge) {
+      e.preventDefault();
+      e.stopPropagation();
       onCancelPendingMerge?.();
     }
     // Shift+Enter allows default behavior (new line)

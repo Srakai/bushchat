@@ -57,6 +57,10 @@ const edgeTypes = {
   mergeEdge: MergeEdge,
 };
 
+// Default prompt for merge operations - can be customized by the user before submitting
+const DEFAULT_MERGE_PROMPT =
+  "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
+
 const TreeChatInner = () => {
   // Chat management state
   const [activeChatId, setActiveChatIdState] = useState(() => getActiveChatId());
@@ -669,10 +673,6 @@ const TreeChatInner = () => {
       const branch1Messages = buildConversationFromPath(branch1);
       const branch2Messages = buildConversationFromPath(branch2);
 
-      // Build the default merge prompt
-      let defaultMergePrompt =
-        "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
-
       // Store pending merge info for when user submits
       setPendingMerge({
         firstNodeId,
@@ -682,8 +682,8 @@ const TreeChatInner = () => {
         branch2Messages,
       });
 
-      // Load the default prompt into the input field
-      setInputMessage(defaultMergePrompt);
+      // Load the default prompt into the input field for customization
+      setInputMessage(DEFAULT_MERGE_PROMPT);
       setMergeMode(null);
 
       // Focus the input field
