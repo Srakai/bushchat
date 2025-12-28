@@ -10,6 +10,7 @@ A non-linear chat interface for LLMs. Conversations are displayed as a tree stru
 - 🔀 **Merge branches** - Combine conversation paths with configurable context
 - 🔌 **Any OpenAI-compatible provider** - OpenAI, Ollama, LM Studio, etc.
 - 💾 **Local storage** - Everything persists only in your browser
+- 🔗 **Stateless sharing** - Entire conversation trees are compressed into a sharable URL
 
 ## Setup
 
