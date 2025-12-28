@@ -22,9 +22,13 @@ export const encodeChatState = (chatState) => {
     // Gzip compress
     const compressed = pako.deflate(data);
 
-    // Convert to base64
-    // Use btoa with binary string conversion for browser compatibility
-    const binaryString = String.fromCharCode.apply(null, compressed);
+    // Convert to base64 using chunk-based approach to avoid stack overflow
+    let binaryString = "";
+    const chunkSize = 32768; // Process in 32KB chunks
+    for (let i = 0; i < compressed.length; i += chunkSize) {
+      const chunk = compressed.subarray(i, i + chunkSize);
+      binaryString += String.fromCharCode.apply(null, chunk);
+    }
     const base64 = btoa(binaryString);
 
     // Make URL-safe by replacing +/= with -_
