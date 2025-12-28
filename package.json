@@ -2,11 +2,14 @@
   "name": "bushchat",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://bushchat.xyz",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "@emotion/react": "^11.11.4",
@@ -23,6 +26,7 @@
   },
   "devDependencies": {
     "eslint": "^8",
-    "eslint-config-next": "14.2.4"
+    "eslint-config-next": "14.2.4",
+    "gh-pages": "^6.3.0"
   }
 }

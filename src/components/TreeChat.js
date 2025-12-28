@@ -43,8 +43,10 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SettingsIcon from "@mui/icons-material/Settings";
 import SyncIcon from "@mui/icons-material/Sync";
+import CloudIcon from "@mui/icons-material/Cloud";
 import ChatNode from "./ChatNode";
 import MergeEdge, { CONTEXT_MODE } from "./MergeEdge";
+import { colors, components, typography } from "../styles/theme";
 
 const defaultModels = [
   "chatgpt-4o-latest",
@@ -346,6 +348,11 @@ const TreeChatInner = () => {
     saveApiKey: false,
   });
 
+  // Cloud waitlist state
+  const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
+
   // Load initial state from localStorage or use defaults
   const savedState = useMemo(() => loadChatState(activeChatId), [activeChatId]);
 
@@ -453,30 +460,60 @@ const TreeChatInner = () => {
     setSettingsOpen(false);
   }, [tempSettings]);
 
+  // Handle waitlist submission
+  const handleWaitlistSubmit = useCallback(() => {
+    // In production, this would send to a backend/email service
+    console.log("Waitlist signup:", waitlistEmail);
+    // Store locally to remember they signed up
+    if (typeof window !== "undefined") {
+      localStorage.setItem("bushchat-waitlist-email", waitlistEmail);
+    }
+    setWaitlistSubmitted(true);
+  }, [waitlistEmail]);
+
+  // Check if user already signed up
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedEmail = localStorage.getItem("bushchat-waitlist-email");
+      if (savedEmail) {
+        setWaitlistEmail(savedEmail);
+        setWaitlistSubmitted(true);
+      }
+    }
+  }, []);
+
   // Fetch models from API (can use tempSettings for modal or settings for auto-load)
   const fetchModelsWithConfig = useCallback(async (apiKey, apiUrl) => {
     setIsLoadingModels(true);
     try {
       const url = apiUrl || "https://api.openai.com/v1";
-      
+
       const response = await fetch(`${url}/models`, {
         headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
       });
-      
+
       if (!response.ok) {
         throw new Error("Failed to fetch models");
       }
-      
+
       const data = await response.json();
-      const fetchedModels = data.data
-        ?.map((m) => m.id)
-        ?.filter((id) => id && !id.includes("embedding") && !id.includes("whisper") && !id.includes("tts") && !id.includes("dall-e"))
-        ?.sort() || [];
-      
+      const fetchedModels =
+        data.data
+          ?.map((m) => m.id)
+          ?.filter(
+            (id) =>
+              id &&
+              !id.includes("embedding") &&
+              !id.includes("whisper") &&
+              !id.includes("tts") &&
+              !id.includes("dall-e")
+          )
+          ?.sort() || [];
+
       if (fetchedModels.length > 0) {
         setModelsList(fetchedModels);
         // If current model not in list, select first one
-        setSelectedModel((current) => 
+        setSelectedModel((current) =>
           fetchedModels.includes(current) ? current : fetchedModels[0]
         );
       }
@@ -1400,7 +1437,13 @@ const TreeChatInner = () => {
   }, []);
 
   return (
-    <Box sx={{ width: "100vw", height: "100vh", backgroundColor: "#1a1a1a" }}>
+    <Box
+      sx={{
+        width: "100vw",
+        height: "100vh",
+        backgroundColor: colors.bg.primary,
+      }}
+    >
       <ReactFlow
         nodes={nodesWithCallbacks}
         edges={edgesWithCallbacks}
@@ -1417,12 +1460,12 @@ const TreeChatInner = () => {
         deleteKeyCode={null}
         selectionKeyCode={null}
       >
-        <Background color="#333" gap={20} />
+        <Background color={colors.border.secondary} gap={20} />
         <Controls
           style={{
-            backgroundColor: "#2a2a2a",
+            backgroundColor: colors.bg.secondary,
             borderRadius: 8,
-            border: "1px solid #444",
+            border: `1px solid ${colors.border.primary}`,
           }}
         />
 
@@ -1432,13 +1475,11 @@ const TreeChatInner = () => {
             component="form"
             onSubmit={handleSubmit}
             sx={{
+              ...components.panel,
               display: "flex",
               alignItems: "center",
               gap: 1,
               p: 1.5,
-              backgroundColor: "#2a2a2a",
-              border: "1px solid #444",
-              borderRadius: 2,
               minWidth: 600,
               mb: 2,
             }}
@@ -1458,33 +1499,13 @@ const TreeChatInner = () => {
               autoComplete="off"
               autoCorrect="off"
               spellCheck={false}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  backgroundColor: "#1a1a1a",
-                  color: "#fff",
-                  "& fieldset": { borderColor: "#444" },
-                  "&:hover fieldset": { borderColor: "#666" },
-                  "&.Mui-focused fieldset": { borderColor: "#4a9eff" },
-                },
-                "& .MuiInputBase-input::placeholder": { color: "#888" },
-              }}
+              sx={components.textField}
             />
             <FormControl size="small" sx={{ minWidth: 160 }}>
               <Select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                sx={{
-                  backgroundColor: "#1a1a1a",
-                  color: "#fff",
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: "#444" },
-                  "&:hover .MuiOutlinedInput-notchedOutline": {
-                    borderColor: "#666",
-                  },
-                  "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-                    borderColor: "#4a9eff",
-                  },
-                  "& .MuiSvgIcon-root": { color: "#888" },
-                }}
+                sx={components.select}
               >
                 {modelsList.map((model) => (
                   <MenuItem key={model} value={model}>
@@ -1496,12 +1517,7 @@ const TreeChatInner = () => {
             <IconButton
               type="submit"
               disabled={!inputMessage.trim()}
-              sx={{
-                backgroundColor: "#4a9eff",
-                color: "#fff",
-                "&:hover": { backgroundColor: "#3a8eef" },
-                "&.Mui-disabled": { backgroundColor: "#444", color: "#666" },
-              }}
+              sx={components.buttonPrimary}
             >
               <SendIcon />
             </IconButton>
@@ -1512,9 +1528,10 @@ const TreeChatInner = () => {
         <Panel position="top-left">
           <Paper
             sx={{
-              backgroundColor: "#2a2a2a",
-              border: mergeMode ? "1px solid #ff9800" : "1px solid #444",
-              borderRadius: 2,
+              ...components.panel,
+              border: mergeMode
+                ? `1px solid ${colors.accent.orange}`
+                : `1px solid ${colors.border.primary}`,
               minWidth: 220,
               maxWidth: 280,
               overflow: "hidden",
@@ -1529,37 +1546,48 @@ const TreeChatInner = () => {
                 justifyContent: "space-between",
               }}
             >
-              <Typography variant="subtitle2" sx={{ color: "#4a9eff" }}>
+              <Typography
+                variant="subtitle2"
+                sx={{ color: colors.accent.blue }}
+              >
                 bushchat
               </Typography>
-              <IconButton
-                size="small"
-                onClick={handleOpenSettings}
-                sx={{ color: "#888", p: 0.5, "&:hover": { color: "#fff" } }}
-              >
-                <SettingsIcon fontSize="small" />
-              </IconButton>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                <IconButton
+                  size="small"
+                  onClick={() => setWaitlistOpen(true)}
+                  sx={components.iconButtonMuted}
+                  title="Sync to Cloud (Coming Soon)"
+                >
+                  <CloudIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={handleOpenSettings}
+                  sx={components.iconButtonMuted}
+                >
+                  <SettingsIcon fontSize="small" />
+                </IconButton>
+              </Box>
             </Box>
 
-            <Divider sx={{ borderColor: "#444" }} />
+            <Divider sx={components.divider} />
 
             {/* Collapsible Chats section */}
             <Box sx={{ p: 1 }}>
               <Box
                 onClick={() => setChatsExpanded(!chatsExpanded)}
                 sx={{
+                  ...components.hoverBox,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  cursor: "pointer",
                   py: 0.5,
-                  "&:hover": { backgroundColor: "#333" },
-                  borderRadius: 1,
                   px: 0.5,
                   mx: -0.5,
                 }}
               >
-                <Typography variant="caption" sx={{ color: "#888" }}>
+                <Typography variant="caption" sx={typography.muted}>
                   Chats
                 </Typography>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
@@ -1569,14 +1597,18 @@ const TreeChatInner = () => {
                       e.stopPropagation();
                       createNewChat();
                     }}
-                    sx={{ color: "#4a9eff", p: 0.25 }}
+                    sx={{ color: colors.accent.blue, p: 0.25 }}
                   >
                     <AddIcon sx={{ fontSize: 16 }} />
                   </IconButton>
                   {chatsExpanded ? (
-                    <ExpandLessIcon sx={{ fontSize: 16, color: "#888" }} />
+                    <ExpandLessIcon
+                      sx={{ fontSize: 16, color: colors.text.muted }}
+                    />
                   ) : (
-                    <ExpandMoreIcon sx={{ fontSize: 16, color: "#888" }} />
+                    <ExpandMoreIcon
+                      sx={{ fontSize: 16, color: colors.text.muted }}
+                    />
                   )}
                 </Box>
               </Box>
@@ -1593,8 +1625,8 @@ const TreeChatInner = () => {
                             size="small"
                             onClick={(e) => deleteChat(chat.id, e)}
                             sx={{
-                              color: "#666",
-                              "&:hover": { color: "#f44" },
+                              color: colors.text.dim,
+                              "&:hover": { color: colors.accent.delete },
                               p: 0.5,
                             }}
                           >
@@ -1606,22 +1638,17 @@ const TreeChatInner = () => {
                       <ListItemButton
                         selected={chat.id === activeChatId}
                         onClick={() => switchToChat(chat.id)}
-                        sx={{
-                          borderRadius: 1,
-                          py: 0.5,
-                          "&.Mui-selected": {
-                            backgroundColor: "#3a3a3a",
-                            "&:hover": { backgroundColor: "#444" },
-                          },
-                          "&:hover": { backgroundColor: "#333" },
-                        }}
+                        sx={components.listItemButton}
                       >
                         <ListItemText
                           primary={chat.name}
                           primaryTypographyProps={{
                             variant: "caption",
                             sx: {
-                              color: chat.id === activeChatId ? "#fff" : "#aaa",
+                              color:
+                                chat.id === activeChatId
+                                  ? colors.text.primary
+                                  : colors.text.secondary,
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
@@ -1635,7 +1662,7 @@ const TreeChatInner = () => {
               </Collapse>
             </Box>
 
-            <Divider sx={{ borderColor: "#444" }} />
+            <Divider sx={components.divider} />
 
             {/* Info section - always visible */}
             <Box sx={{ p: 1.5 }}>
@@ -1644,7 +1671,7 @@ const TreeChatInner = () => {
                   <Typography
                     variant="caption"
                     sx={{
-                      color: "#ff9800",
+                      color: colors.accent.orange,
                       display: "block",
                       fontWeight: 500,
                     }}
@@ -1653,7 +1680,7 @@ const TreeChatInner = () => {
                   </Typography>
                   <Typography
                     variant="caption"
-                    sx={{ color: "#888", display: "block", mt: 0.5 }}
+                    sx={{ ...typography.muted, display: "block", mt: 0.5 }}
                   >
                     Click another node to merge, or click the same node to
                     cancel
@@ -1663,10 +1690,10 @@ const TreeChatInner = () => {
                     onClick={() => setMergeMode(null)}
                     sx={{
                       mt: 1,
-                      color: "#ff9800",
-                      borderColor: "#ff9800",
+                      color: colors.accent.orange,
+                      borderColor: colors.accent.orange,
                       "&:hover": {
-                        borderColor: "#ffb74d",
+                        borderColor: colors.accent.orangeHover,
                         backgroundColor: "rgba(255,152,0,0.1)",
                       },
                     }}
@@ -1678,7 +1705,7 @@ const TreeChatInner = () => {
               ) : (
                 <Typography
                   variant="caption"
-                  sx={{ color: "#888", display: "block" }}
+                  sx={{ ...typography.muted, display: "block" }}
                 >
                   (+) branch • Edit/Delete on hover • Merge icon to combine
                 </Typography>
@@ -1686,7 +1713,7 @@ const TreeChatInner = () => {
               {conversationHistory.length > 0 && (
                 <Typography
                   variant="caption"
-                  sx={{ color: "#666", display: "block", mt: 0.5 }}
+                  sx={{ ...typography.dim, display: "block", mt: 0.5 }}
                 >
                   Context: {conversationHistory.length} messages
                 </Typography>
@@ -1699,19 +1726,12 @@ const TreeChatInner = () => {
         <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)}>
           <Paper
             sx={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              backgroundColor: "#2a2a2a",
-              border: "1px solid #444",
-              borderRadius: 2,
-              p: 3,
+              ...components.modal,
               minWidth: 400,
               maxWidth: 500,
             }}
           >
-            <Typography variant="h6" sx={{ color: "#fff", mb: 2 }}>
+            <Typography variant="h6" sx={{ color: colors.text.primary, mb: 2 }}>
               Settings
             </Typography>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -1728,17 +1748,7 @@ const TreeChatInner = () => {
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
-                sx={{
-                  "& .MuiOutlinedInput-root": {
-                    backgroundColor: "#1a1a1a",
-                    color: "#fff",
-                    "& fieldset": { borderColor: "#444" },
-                    "&:hover fieldset": { borderColor: "#666" },
-                    "&.Mui-focused fieldset": { borderColor: "#4a9eff" },
-                  },
-                  "& .MuiInputLabel-root": { color: "#888" },
-                  "& .MuiInputLabel-root.Mui-focused": { color: "#4a9eff" },
-                }}
+                sx={components.textFieldWithLabel}
               />
               <FormControlLabel
                 control={
@@ -1750,14 +1760,11 @@ const TreeChatInner = () => {
                         saveApiKey: e.target.checked,
                       })
                     }
-                    sx={{
-                      color: "#888",
-                      "&.Mui-checked": { color: "#4a9eff" },
-                    }}
+                    sx={components.checkbox}
                   />
                 }
                 label={
-                  <Typography variant="body2" sx={{ color: "#aaa" }}>
+                  <Typography variant="body2" sx={typography.secondary}>
                     🙈 Save API key in browser storage
                   </Typography>
                 }
@@ -1775,27 +1782,19 @@ const TreeChatInner = () => {
                   autoComplete="off"
                   autoCorrect="off"
                   spellCheck={false}
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      backgroundColor: "#1a1a1a",
-                      color: "#fff",
-                      "& fieldset": { borderColor: "#444" },
-                      "&:hover fieldset": { borderColor: "#666" },
-                      "&.Mui-focused fieldset": { borderColor: "#4a9eff" },
-                    },
-                    "& .MuiInputLabel-root": { color: "#888" },
-                    "& .MuiInputLabel-root.Mui-focused": { color: "#4a9eff" },
-                  }}
+                  sx={components.textFieldWithLabel}
                 />
                 <IconButton
                   onClick={fetchModels}
                   disabled={isLoadingModels}
                   sx={{
                     mt: 0.5,
-                    color: "#4a9eff",
+                    color: colors.accent.blue,
                     "&:hover": { backgroundColor: "rgba(74, 158, 255, 0.1)" },
-                    "&.Mui-disabled": { color: "#666" },
-                    animation: isLoadingModels ? "spin 1s linear infinite" : "none",
+                    "&.Mui-disabled": { color: colors.text.dim },
+                    animation: isLoadingModels
+                      ? "spin 1s linear infinite"
+                      : "none",
                     "@keyframes spin": {
                       "0%": { transform: "rotate(0deg)" },
                       "100%": { transform: "rotate(360deg)" },
@@ -1807,11 +1806,11 @@ const TreeChatInner = () => {
                 </IconButton>
               </Box>
               {modelsList.length > 0 && modelsList !== defaultModels && (
-                <Typography variant="caption" sx={{ color: "#4a9eff" }}>
+                <Typography variant="caption" sx={typography.accent}>
                   ✓ Loaded {modelsList.length} models from provider
                 </Typography>
               )}
-              <Typography variant="caption" sx={{ color: "#666" }}>
+              <Typography variant="caption" sx={typography.dim}>
                 These settings override the server .env configuration. Leave
                 empty to use server defaults.
               </Typography>
@@ -1825,21 +1824,120 @@ const TreeChatInner = () => {
               >
                 <Button
                   onClick={() => setSettingsOpen(false)}
-                  sx={{ color: "#888" }}
+                  sx={typography.muted}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleSaveSettings}
                   variant="contained"
-                  sx={{
-                    backgroundColor: "#4a9eff",
-                    "&:hover": { backgroundColor: "#3a8eef" },
-                  }}
+                  sx={components.buttonPrimary}
                 >
                   Save
                 </Button>
               </Box>
+            </Box>
+          </Paper>
+        </Modal>
+
+        {/* Cloud Waitlist Modal */}
+        <Modal open={waitlistOpen} onClose={() => setWaitlistOpen(false)}>
+          <Paper
+            sx={{
+              ...components.modal,
+              minWidth: 360,
+              maxWidth: 420,
+            }}
+          >
+            <Box sx={{ textAlign: "center" }}>
+              <Box
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 48,
+                  height: 48,
+                  borderRadius: "12px",
+                  backgroundColor: colors.bg.tertiary,
+                  border: `1px solid ${colors.border.secondary}`,
+                  mb: 2,
+                }}
+              >
+                <CloudIcon sx={{ color: colors.text.muted, fontSize: 24 }} />
+              </Box>
+              <Typography
+                variant="h6"
+                sx={{
+                  background: `linear-gradient(135deg, ${colors.accent.blue} 0%, #82c4ff 100%)`,
+                  backgroundClip: "text",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  mb: 1,
+                  fontWeight: 600,
+                }}
+              >
+                Cloud Sync
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{ ...typography.muted, mb: 3, lineHeight: 1.6 }}
+              >
+                Sync your conversations across devices, share branches with
+                collaborators, and never lose your chat history.
+              </Typography>
+
+              {waitlistSubmitted ? (
+                <Box
+                  sx={{
+                    p: 2,
+                    borderRadius: 1.5,
+                    backgroundColor: "rgba(74, 158, 255, 0.08)",
+                    border: "1px solid rgba(74, 158, 255, 0.2)",
+                  }}
+                >
+                  <Typography variant="body2" sx={typography.accent}>
+                    ✓ You&apos;re on the list!
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{ ...typography.dim, display: "block", mt: 0.5 }}
+                  >
+                    We&apos;ll notify you when cloud sync is ready.
+                  </Typography>
+                </Box>
+              ) : (
+                <Box
+                  sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}
+                >
+                  <TextField
+                    placeholder="Enter your email"
+                    value={waitlistEmail}
+                    onChange={(e) => setWaitlistEmail(e.target.value)}
+                    fullWidth
+                    size="small"
+                    autoComplete="email"
+                    type="email"
+                    sx={components.textField}
+                  />
+                  <Button
+                    onClick={handleWaitlistSubmit}
+                    disabled={
+                      !waitlistEmail.trim() || !waitlistEmail.includes("@")
+                    }
+                    fullWidth
+                    sx={components.buttonSecondary}
+                  >
+                    Join Waitlist
+                  </Button>
+                </Box>
+              )}
+
+              <Typography
+                variant="caption"
+                sx={{ ...typography.dim, display: "block", mt: 2 }}
+              >
+                Coming Soon
+              </Typography>
             </Box>
           </Paper>
         </Modal>

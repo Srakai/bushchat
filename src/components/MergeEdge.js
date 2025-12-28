@@ -2,6 +2,7 @@
 import React, { memo } from "react";
 import { getBezierPath, EdgeLabelRenderer } from "reactflow";
 import { Box, Tooltip } from "@mui/material";
+import { colors } from "../styles/theme";
 
 // Context modes for merge
 export const CONTEXT_MODE = {
@@ -82,16 +83,20 @@ const MergeEdge = ({
               height: 24,
               borderRadius: "50%",
               backgroundColor:
-                contextMode === CONTEXT_MODE.FULL ? "#ff9800" : "#666",
-              border: "2px solid #1a1a1a",
-              color: "#fff",
+                contextMode === CONTEXT_MODE.FULL
+                  ? colors.accent.orange
+                  : colors.border.primary,
+              border: `2px solid ${colors.bg.primary}`,
+              color: colors.text.primary,
               fontSize: 10,
               fontWeight: "bold",
               transition: "all 0.2s ease",
               "&:hover": {
                 transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px) scale(1.2)`,
                 backgroundColor:
-                  contextMode === CONTEXT_MODE.FULL ? "#ffb74d" : "#888",
+                  contextMode === CONTEXT_MODE.FULL
+                    ? colors.accent.orangeHover
+                    : colors.text.muted,
               },
             }}
           >

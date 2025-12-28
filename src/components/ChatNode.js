@@ -6,7 +6,6 @@ import {
   Typography,
   IconButton,
   CircularProgress,
-  Collapse,
   TextField,
   Tooltip,
 } from "@mui/material";
@@ -19,10 +18,11 @@ import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import MergeIcon from "@mui/icons-material/CallMerge";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import { colors, components } from "../styles/theme";
 
-const COLLAPSE_THRESHOLD = 500; // Characters before showing collapse option
+const COLLAPSE_THRESHOLD = 500;
 
-const CollapsibleText = ({ text, label, color }) => {
+const CollapsibleText = ({ text }) => {
   const [collapsed, setCollapsed] = useState(text?.length > COLLAPSE_THRESHOLD);
   const shouldShowCollapse = text?.length > COLLAPSE_THRESHOLD;
 
@@ -35,7 +35,7 @@ const CollapsibleText = ({ text, label, color }) => {
       <Typography
         variant="body2"
         sx={{
-          color: "#e0e0e0",
+          color: colors.text.primary,
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
         }}
@@ -54,8 +54,8 @@ const CollapsibleText = ({ text, label, color }) => {
             gap: 0.5,
             mt: 0.5,
             cursor: "pointer",
-            color: "#4a9eff",
-            "&:hover": { color: "#6ab4ff" },
+            color: colors.accent.blue,
+            "&:hover": { color: colors.accent.blueHover },
           }}
         >
           {collapsed ? (
@@ -126,18 +126,20 @@ const ChatNode = ({ id, data, selected }) => {
       sx={{
         minWidth: 350,
         maxWidth: 500,
-        backgroundColor: selected ? "#1e1e1e" : "#2a2a2a",
+        backgroundColor: selected ? colors.bg.tertiary : colors.bg.secondary,
         border: isMergeSource
-          ? "2px solid #ff9800"
+          ? `2px solid ${colors.accent.orange}`
           : selected
-          ? "2px solid #4a9eff"
-          : "1px solid #444",
+          ? `2px solid ${colors.accent.blue}`
+          : `1px solid ${colors.border.primary}`,
         borderRadius: 2,
         overflow: "hidden",
         cursor: "pointer",
         transition: "all 0.2s ease",
         "&:hover": {
-          borderColor: isMergeSource ? "#ffb74d" : "#666",
+          borderColor: isMergeSource
+            ? colors.accent.orangeHover
+            : colors.text.muted,
         },
       }}
     >
@@ -147,7 +149,7 @@ const ChatNode = ({ id, data, selected }) => {
           type="target"
           position={Position.Top}
           style={{
-            background: "#4a9eff",
+            background: colors.accent.blue,
             width: 8,
             height: 8,
             border: "none",
@@ -171,13 +173,7 @@ const ChatNode = ({ id, data, selected }) => {
             <IconButton
               size="small"
               onClick={handleStartEdit}
-              sx={{
-                backgroundColor: "#444",
-                color: "#fff",
-                width: 24,
-                height: 24,
-                "&:hover": { backgroundColor: "#555" },
-              }}
+              sx={components.iconButton}
             >
               <EditIcon sx={{ fontSize: 14 }} />
             </IconButton>
@@ -188,11 +184,11 @@ const ChatNode = ({ id, data, selected }) => {
                 size="small"
                 onClick={handleRegenerateMerge}
                 sx={{
-                  backgroundColor: "#ff9800",
-                  color: "#fff",
+                  backgroundColor: colors.accent.orange,
+                  color: colors.text.primary,
                   width: 24,
                   height: 24,
-                  "&:hover": { backgroundColor: "#ffb74d" },
+                  "&:hover": { backgroundColor: colors.accent.orangeHover },
                 }}
               >
                 <RefreshIcon sx={{ fontSize: 14 }} />
@@ -203,13 +199,7 @@ const ChatNode = ({ id, data, selected }) => {
             <IconButton
               size="small"
               onClick={handleMerge}
-              sx={{
-                backgroundColor: "#444",
-                color: "#fff",
-                width: 24,
-                height: 24,
-                "&:hover": { backgroundColor: "#555" },
-              }}
+              sx={components.iconButton}
             >
               <MergeIcon sx={{ fontSize: 14 }} />
             </IconButton>
@@ -218,13 +208,7 @@ const ChatNode = ({ id, data, selected }) => {
             <IconButton
               size="small"
               onClick={handleDelete}
-              sx={{
-                backgroundColor: "#662222",
-                color: "#fff",
-                width: 24,
-                height: 24,
-                "&:hover": { backgroundColor: "#882222" },
-              }}
+              sx={components.iconButtonDanger}
             >
               <DeleteIcon sx={{ fontSize: 14 }} />
             </IconButton>
@@ -237,14 +221,14 @@ const ChatNode = ({ id, data, selected }) => {
         <Box
           sx={{
             p: 1.5,
-            backgroundColor: "#1a3a5c",
-            borderBottom: "1px solid #444",
+            backgroundColor: colors.bg.userMessage,
+            borderBottom: `1px solid ${colors.border.secondary}`,
           }}
         >
           <Typography
             variant="caption"
             sx={{
-              color: "#8ab4f8",
+              color: colors.accent.userLabel,
               fontWeight: 500,
               mb: 0.5,
               display: "block",
@@ -271,13 +255,10 @@ const ChatNode = ({ id, data, selected }) => {
                   }
                 }}
                 sx={{
+                  ...components.textField,
                   "& .MuiOutlinedInput-root": {
-                    backgroundColor: "#1a1a1a",
-                    color: "#fff",
+                    ...components.textField["& .MuiOutlinedInput-root"],
                     fontSize: "0.875rem",
-                    "& fieldset": { borderColor: "#444" },
-                    "&:hover fieldset": { borderColor: "#666" },
-                    "&.Mui-focused fieldset": { borderColor: "#4a9eff" },
                   },
                 }}
               />
@@ -287,37 +268,21 @@ const ChatNode = ({ id, data, selected }) => {
                 <IconButton
                   size="small"
                   onClick={handleCancelEdit}
-                  sx={{
-                    backgroundColor: "#444",
-                    color: "#fff",
-                    width: 24,
-                    height: 24,
-                    "&:hover": { backgroundColor: "#555" },
-                  }}
+                  sx={components.iconButton}
                 >
                   <CloseIcon sx={{ fontSize: 14 }} />
                 </IconButton>
                 <IconButton
                   size="small"
                   onClick={handleSaveEdit}
-                  sx={{
-                    backgroundColor: "#4a9eff",
-                    color: "#fff",
-                    width: 24,
-                    height: 24,
-                    "&:hover": { backgroundColor: "#3a8eef" },
-                  }}
+                  sx={{ ...components.buttonPrimary, width: 24, height: 24 }}
                 >
                   <CheckIcon sx={{ fontSize: 14 }} />
                 </IconButton>
               </Box>
             </Box>
           ) : (
-            <CollapsibleText
-              text={data.userMessage}
-              label="You"
-              color="#8ab4f8"
-            />
+            <CollapsibleText text={data.userMessage} />
           )}
         </Box>
       )}
@@ -327,14 +292,14 @@ const ChatNode = ({ id, data, selected }) => {
         {isRoot ? (
           <Typography
             variant="body2"
-            sx={{ color: "#888", fontStyle: "italic" }}
+            sx={{ color: colors.text.muted, fontStyle: "italic" }}
           >
             Start a conversation...
           </Typography>
         ) : isLoading ? (
           <Box display="flex" alignItems="center" gap={1}>
-            <CircularProgress size={16} sx={{ color: "#4a9eff" }} />
-            <Typography variant="body2" sx={{ color: "#888" }}>
+            <CircularProgress size={16} sx={{ color: colors.accent.blue }} />
+            <Typography variant="body2" sx={{ color: colors.text.muted }}>
               Generating...
             </Typography>
           </Box>
@@ -343,7 +308,7 @@ const ChatNode = ({ id, data, selected }) => {
             <Typography
               variant="caption"
               sx={{
-                color: "#81c784",
+                color: colors.accent.green,
                 fontWeight: 500,
                 mb: 0.5,
                 display: "block",
@@ -351,14 +316,10 @@ const ChatNode = ({ id, data, selected }) => {
             >
               Assistant
             </Typography>
-            <CollapsibleText
-              text={data.assistantMessage}
-              label="Assistant"
-              color="#81c784"
-            />
+            <CollapsibleText text={data.assistantMessage} />
           </>
         ) : data.error ? (
-          <Typography variant="body2" sx={{ color: "#f44336" }}>
+          <Typography variant="body2" sx={{ color: colors.accent.error }}>
             Error: {data.error}
           </Typography>
         ) : null}
@@ -381,15 +342,7 @@ const ChatNode = ({ id, data, selected }) => {
               e.stopPropagation();
               data.onAddBranch?.(id);
             }}
-            sx={{
-              backgroundColor: "#4a9eff",
-              color: "#fff",
-              width: 24,
-              height: 24,
-              "&:hover": {
-                backgroundColor: "#3a8eef",
-              },
-            }}
+            sx={{ ...components.buttonPrimary, width: 24, height: 24 }}
           >
             <AddIcon sx={{ fontSize: 16 }} />
           </IconButton>
@@ -401,7 +354,7 @@ const ChatNode = ({ id, data, selected }) => {
         type="source"
         position={Position.Bottom}
         style={{
-          background: "#4a9eff",
+          background: colors.accent.blue,
           width: 8,
           height: 8,
           border: "none",
