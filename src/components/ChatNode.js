@@ -22,11 +22,13 @@ import { colors, components } from "../styles/theme";
 
 const COLLAPSE_THRESHOLD = 500;
 
-const CollapsibleText = ({ text }) => {
-  const [collapsed, setCollapsed] = useState(text?.length > COLLAPSE_THRESHOLD);
+const CollapsibleText = ({ text, collapsed, onToggleCollapse }) => {
   const shouldShowCollapse = text?.length > COLLAPSE_THRESHOLD;
+  // Use prop if provided, otherwise default based on text length
+  const isCollapsed =
+    collapsed !== undefined ? collapsed : text?.length > COLLAPSE_THRESHOLD;
 
-  const displayText = collapsed
+  const displayText = isCollapsed
     ? text?.slice(0, COLLAPSE_THRESHOLD) + "..."
     : text;
 
@@ -47,7 +49,7 @@ const CollapsibleText = ({ text }) => {
         <Box
           onClick={(e) => {
             e.stopPropagation();
-            setCollapsed(!collapsed);
+            if (onToggleCollapse) onToggleCollapse(!isCollapsed);
           }}
           sx={{
             display: "flex",
@@ -59,7 +61,7 @@ const CollapsibleText = ({ text }) => {
             "&:hover": { color: colors.accent.blueHover },
           }}
         >
-          {collapsed ? (
+          {isCollapsed ? (
             <>
               <ExpandMoreIcon sx={{ fontSize: 16 }} />
               <Typography variant="caption">
@@ -103,6 +105,14 @@ const ChatNode = ({ id, data, selected }) => {
   const handleCancelEdit = (e) => {
     e.stopPropagation();
     setIsEditing(false);
+  };
+
+  const handleToggleUserCollapse = (collapsed) => {
+    data.onToggleCollapse?.(id, "user", collapsed);
+  };
+
+  const handleToggleAssistantCollapse = (collapsed) => {
+    data.onToggleCollapse?.(id, "assistant", collapsed);
   };
 
   const handleDelete = (e) => {
@@ -286,7 +296,11 @@ const ChatNode = ({ id, data, selected }) => {
               </Box>
             </Box>
           ) : (
-            <CollapsibleText text={data.userMessage} />
+            <CollapsibleText
+              text={data.userMessage}
+              collapsed={data.userMessageCollapsed}
+              onToggleCollapse={handleToggleUserCollapse}
+            />
           )}
         </Box>
       )}
@@ -320,7 +334,11 @@ const ChatNode = ({ id, data, selected }) => {
             >
               Assistant
             </Typography>
-            <CollapsibleText text={data.assistantMessage} />
+            <CollapsibleText
+              text={data.assistantMessage}
+              collapsed={data.assistantMessageCollapsed}
+              onToggleCollapse={handleToggleAssistantCollapse}
+            />
           </>
         ) : data.error ? (
           <Typography variant="body2" sx={{ color: colors.accent.error }}>

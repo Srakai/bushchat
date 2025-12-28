@@ -16,7 +16,7 @@ import ReactFlow, {
   Panel,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { Box } from "@mui/material";
+import { Box, Snackbar, Alert } from "@mui/material";
 
 // Components
 import ChatNode from "./ChatNode";
@@ -68,7 +68,9 @@ const DEFAULT_MERGE_PROMPT =
 
 const TreeChatInner = () => {
   // Chat management state
-  const [activeChatId, setActiveChatIdState] = useState(() => getActiveChatId());
+  const [activeChatId, setActiveChatIdState] = useState(() =>
+    getActiveChatId()
+  );
   const [chatsList, setChatsList] = useState(() => loadChatsList());
 
   // Track if current chat is a shared chat that hasn't been saved yet
@@ -80,6 +82,13 @@ const TreeChatInner = () => {
 
   // Waitlist modal state
   const [waitlistOpen, setWaitlistOpen] = useState(false);
+
+  // Snackbar state for share feedback
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   // Load initial state from localStorage or use defaults
   const savedState = useMemo(() => loadChatState(activeChatId), [activeChatId]);
@@ -251,6 +260,7 @@ const TreeChatInner = () => {
         onDeleteNode: undefined,
         onMergeNode: undefined,
         onRegenerateMerge: undefined,
+        onToggleCollapse: undefined,
         isMergeSource: undefined,
       },
     }));
@@ -266,8 +276,11 @@ const TreeChatInner = () => {
     if (shareUrl) {
       navigator.clipboard.writeText(shareUrl).then(
         () => {
-          // Could add a toast notification here
-          console.log("Share URL copied to clipboard!");
+          setSnackbar({
+            open: true,
+            message: "Share link copied to clipboard!",
+            severity: "success",
+          });
         },
         (err) => {
           console.error("Failed to copy share URL:", err);
@@ -275,6 +288,12 @@ const TreeChatInner = () => {
           window.prompt("Copy this share URL:", shareUrl);
         }
       );
+    } else {
+      setSnackbar({
+        open: true,
+        message: "Failed to generate share link",
+        severity: "error",
+      });
     }
   }, [nodes, edges, selectedNodeId]);
 
@@ -433,7 +452,18 @@ const TreeChatInner = () => {
       // Fit view after adding node
       setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 100);
     },
-    [nodes, edges, selectedModel, setNodes, setEdges, updateNodeData, fitView, sendChatRequest, isSharedView, commitSharedChat]
+    [
+      nodes,
+      edges,
+      selectedModel,
+      setNodes,
+      setEdges,
+      updateNodeData,
+      fitView,
+      sendChatRequest,
+      isSharedView,
+      commitSharedChat,
+    ]
   );
 
   // Handle adding a branch from a node
@@ -495,9 +525,13 @@ const TreeChatInner = () => {
         const branch2Messages = buildConversationFromPath(branch2);
 
         const mode1Label =
-          contextMode1 === CONTEXT_MODE.FULL ? "full context" : "single message";
+          contextMode1 === CONTEXT_MODE.FULL
+            ? "full context"
+            : "single message";
         const mode2Label =
-          contextMode2 === CONTEXT_MODE.FULL ? "full context" : "single message";
+          contextMode2 === CONTEXT_MODE.FULL
+            ? "full context"
+            : "single message";
 
         let mergedContext =
           "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
@@ -589,7 +623,15 @@ const TreeChatInner = () => {
         }
       );
     },
-    [nodes, edges, selectedModel, updateNodeData, sendChatRequest, isSharedView, commitSharedChat]
+    [
+      nodes,
+      edges,
+      selectedModel,
+      updateNodeData,
+      sendChatRequest,
+      isSharedView,
+      commitSharedChat,
+    ]
   );
 
   // Handle deleting a node and its descendants
@@ -616,6 +658,29 @@ const TreeChatInner = () => {
       setSelectedNodeId(parentId);
     },
     [nodes, edges, setNodes, setEdges, isSharedView, commitSharedChat]
+  );
+
+  // Handle toggling collapsed state on a node message
+  const handleToggleCollapse = useCallback(
+    (nodeId, messageType, collapsed) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === nodeId) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                [messageType === "user"
+                  ? "userMessageCollapsed"
+                  : "assistantMessageCollapsed"]: collapsed,
+              },
+            };
+          }
+          return node;
+        })
+      );
+    },
+    [setNodes]
   );
 
   // Toggle context mode on an edge
@@ -819,6 +884,7 @@ const TreeChatInner = () => {
         onDeleteNode: handleDeleteNode,
         onMergeNode: handleMergeNode,
         onRegenerateMerge: handleRegenerateMerge,
+        onToggleCollapse: handleToggleCollapse,
         isMergeSource: mergeMode?.firstNodeId === node.id,
       },
     }));
@@ -829,6 +895,7 @@ const TreeChatInner = () => {
     handleDeleteNode,
     handleMergeNode,
     handleRegenerateMerge,
+    handleToggleCollapse,
     mergeMode,
   ]);
 
@@ -848,7 +915,13 @@ const TreeChatInner = () => {
     async (userPrompt) => {
       if (!pendingMerge) return;
 
-      const { firstNodeId, secondNodeId, lcaId, branch1Messages, branch2Messages } = pendingMerge;
+      const {
+        firstNodeId,
+        secondNodeId,
+        lcaId,
+        branch1Messages,
+        branch2Messages,
+      } = pendingMerge;
 
       // Get the path to LCA for base context
       const path1 = getPathToNode(firstNodeId, nodes, edges);
@@ -1070,6 +1143,31 @@ const TreeChatInner = () => {
           open={waitlistOpen}
           onClose={() => setWaitlistOpen(false)}
         />
+
+        {/* Share Snackbar */}
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={3000}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert
+            onClose={() => setSnackbar({ ...snackbar, open: false })}
+            severity={snackbar.severity}
+            icon={false}
+            sx={{
+              backgroundColor: colors.bg.secondary,
+              color: colors.text.primary,
+              border: `1px solid ${colors.border.primary}`,
+              borderRadius: 2,
+              "& .MuiAlert-action": {
+                color: colors.text.muted,
+              },
+            }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
       </ReactFlow>
     </Box>
   );
