@@ -19,6 +19,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SettingsIcon from "@mui/icons-material/Settings";
 import CloudIcon from "@mui/icons-material/Cloud";
+import ShareIcon from "@mui/icons-material/Share";
 import { colors, components, typography } from "../styles/theme";
 
 const InfoPanel = ({
@@ -29,6 +30,7 @@ const InfoPanel = ({
   onDeleteChat,
   onOpenSettings,
   onOpenWaitlist,
+  onShareChat,
   mergeMode,
   onCancelMerge,
   conversationHistoryLength,
@@ -60,6 +62,14 @@ const InfoPanel = ({
           bushchat
         </Typography>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <IconButton
+            size="small"
+            onClick={onShareChat}
+            sx={components.iconButtonMuted}
+            title="Share Chat"
+          >
+            <ShareIcon fontSize="small" />
+          </IconButton>
           <IconButton
             size="small"
             onClick={onOpenWaitlist}

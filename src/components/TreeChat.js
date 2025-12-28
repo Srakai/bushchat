@@ -16,7 +16,7 @@ import ReactFlow, {
   Panel,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { Box } from "@mui/material";
+import { Box, Snackbar, Alert } from "@mui/material";
 
 // Components
 import ChatNode from "./ChatNode";
@@ -48,6 +48,11 @@ import {
   generateChatId,
 } from "../utils/storage";
 import { useChatApi } from "../hooks/useChatApi";
+import {
+  generateShareUrl,
+  getSharedChatFromUrl,
+  clearShareHash,
+} from "../utils/sharing";
 
 const nodeTypes = {
   chatNode: ChatNode,
@@ -63,8 +68,13 @@ const DEFAULT_MERGE_PROMPT =
 
 const TreeChatInner = () => {
   // Chat management state
-  const [activeChatId, setActiveChatIdState] = useState(() => getActiveChatId());
+  const [activeChatId, setActiveChatIdState] = useState(() =>
+    getActiveChatId()
+  );
   const [chatsList, setChatsList] = useState(() => loadChatsList());
+
+  // Track if current chat is a shared chat that hasn't been saved yet
+  const [isSharedView, setIsSharedView] = useState(false);
 
   // Settings state
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -72,6 +82,13 @@ const TreeChatInner = () => {
 
   // Waitlist modal state
   const [waitlistOpen, setWaitlistOpen] = useState(false);
+
+  // Snackbar state for share feedback
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   // Load initial state from localStorage or use defaults
   const savedState = useMemo(() => loadChatState(activeChatId), [activeChatId]);
@@ -96,8 +113,9 @@ const TreeChatInner = () => {
   // Chat API hook
   const { sendChatRequest } = useChatApi(settings);
 
-  // Auto-save to localStorage whenever nodes or edges change
+  // Auto-save to localStorage whenever nodes or edges change (but not for shared view)
   useEffect(() => {
+    if (isSharedView) return; // Don't auto-save shared chats until user takes action
     const timeoutId = setTimeout(() => {
       saveChatState(
         activeChatId,
@@ -109,13 +127,67 @@ const TreeChatInner = () => {
       setChatsList(loadChatsList()); // Refresh list to get updated names
     }, 500); // Debounce saves
     return () => clearTimeout(timeoutId);
-  }, [nodes, edges, selectedNodeId, activeChatId]);
+  }, [nodes, edges, selectedNodeId, activeChatId, isSharedView]);
+
+  // Load shared chat from URL hash on mount
+  const sharedChatLoadedRef = useRef(false);
+  useEffect(() => {
+    if (sharedChatLoadedRef.current) return;
+    sharedChatLoadedRef.current = true;
+
+    const sharedState = getSharedChatFromUrl();
+    if (sharedState && sharedState.nodes) {
+      // Load the shared chat state
+      setNodes(sharedState.nodes || initialNodes);
+      setEdges(sharedState.edges || initialEdges);
+      setSelectedNodeId(sharedState.selectedNodeId || "root");
+      nodeIdCounter.current = sharedState.nodeIdCounter || 1;
+      setIsSharedView(true);
+
+      // Clear the hash from URL
+      clearShareHash();
+
+      // Fit view after loading
+      setTimeout(() => fitView({ padding: 0.2 }), 100);
+    }
+  }, [setNodes, setEdges, fitView]);
+
+  // Function to convert shared view to saved chat (called when user takes action)
+  const commitSharedChat = useCallback(() => {
+    if (!isSharedView) return;
+
+    // Create a new chat entry for the shared chat
+    const newChatId = generateChatId();
+    const newChat = {
+      id: newChatId,
+      name: "Shared Chat",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const updatedList = [newChat, ...chatsList];
+    saveChatsList(updatedList);
+    setChatsList(updatedList);
+    setActiveChatId(newChatId);
+    setActiveChatIdState(newChatId);
+    setIsSharedView(false);
+
+    // Save current state to the new chat
+    saveChatState(
+      newChatId,
+      nodes,
+      edges,
+      selectedNodeId,
+      nodeIdCounter.current
+    );
+    setChatsList(loadChatsList()); // Refresh to get chat name from first message
+  }, [isSharedView, chatsList, nodes, edges, selectedNodeId]);
 
   // Switch to a different chat
   const switchToChat = useCallback(
     (chatId) => {
       setActiveChatId(chatId);
       setActiveChatIdState(chatId);
+      setIsSharedView(false); // Clear shared view when switching to saved chat
       const chatState = loadChatState(chatId);
       if (chatState) {
         setNodes(chatState.nodes || initialNodes);
@@ -175,6 +247,55 @@ const TreeChatInner = () => {
     setSettings(newSettings);
     saveSettings(newSettings, newSettings.saveApiKey);
   }, []);
+
+  // Share current chat
+  const handleShareChat = useCallback(() => {
+    // Prepare chat state for sharing (strip callbacks)
+    const nodesToShare = nodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        onAddBranch: undefined,
+        onEditNode: undefined,
+        onDeleteNode: undefined,
+        onMergeNode: undefined,
+        onRegenerateMerge: undefined,
+        onToggleCollapse: undefined,
+        isMergeSource: undefined,
+      },
+    }));
+
+    const chatState = {
+      nodes: nodesToShare,
+      edges,
+      selectedNodeId,
+      nodeIdCounter: nodeIdCounter.current,
+    };
+
+    const shareUrl = generateShareUrl(chatState);
+    if (shareUrl) {
+      navigator.clipboard.writeText(shareUrl).then(
+        () => {
+          setSnackbar({
+            open: true,
+            message: "Share link copied to clipboard!",
+            severity: "success",
+          });
+        },
+        (err) => {
+          console.error("Failed to copy share URL:", err);
+          // Fallback: show the URL in a prompt
+          window.prompt("Copy this share URL:", shareUrl);
+        }
+      );
+    } else {
+      setSnackbar({
+        open: true,
+        message: "Failed to generate share link",
+        severity: "error",
+      });
+    }
+  }, [nodes, edges, selectedNodeId]);
 
   // Auto-fetch models on startup if API key is configured
   const initialFetchDone = useRef(false);
@@ -253,6 +374,9 @@ const TreeChatInner = () => {
   // Send message and create new node
   const sendMessage = useCallback(
     async (parentNodeId, userMessage) => {
+      // Commit shared chat to storage when user takes action
+      if (isSharedView) commitSharedChat();
+
       const newNodeId = `node-${nodeIdCounter.current++}`;
 
       // Get parent node position
@@ -328,7 +452,18 @@ const TreeChatInner = () => {
       // Fit view after adding node
       setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 100);
     },
-    [nodes, edges, selectedModel, setNodes, setEdges, updateNodeData, fitView, sendChatRequest]
+    [
+      nodes,
+      edges,
+      selectedModel,
+      setNodes,
+      setEdges,
+      updateNodeData,
+      fitView,
+      sendChatRequest,
+      isSharedView,
+      commitSharedChat,
+    ]
   );
 
   // Handle adding a branch from a node
@@ -341,6 +476,9 @@ const TreeChatInner = () => {
   const handleEditNode = useCallback(
     async (nodeId, newUserMessage) => {
       if (!newUserMessage.trim()) return;
+
+      // Commit shared chat to storage when user takes action
+      if (isSharedView) commitSharedChat();
 
       const node = nodes.find((n) => n.id === nodeId);
 
@@ -387,9 +525,13 @@ const TreeChatInner = () => {
         const branch2Messages = buildConversationFromPath(branch2);
 
         const mode1Label =
-          contextMode1 === CONTEXT_MODE.FULL ? "full context" : "single message";
+          contextMode1 === CONTEXT_MODE.FULL
+            ? "full context"
+            : "single message";
         const mode2Label =
-          contextMode2 === CONTEXT_MODE.FULL ? "full context" : "single message";
+          contextMode2 === CONTEXT_MODE.FULL
+            ? "full context"
+            : "single message";
 
         let mergedContext =
           "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
@@ -481,13 +623,24 @@ const TreeChatInner = () => {
         }
       );
     },
-    [nodes, edges, selectedModel, updateNodeData, sendChatRequest]
+    [
+      nodes,
+      edges,
+      selectedModel,
+      updateNodeData,
+      sendChatRequest,
+      isSharedView,
+      commitSharedChat,
+    ]
   );
 
   // Handle deleting a node and its descendants
   const handleDeleteNode = useCallback(
     (nodeId) => {
       if (nodeId === "root") return;
+
+      // Commit shared chat to storage when user takes action
+      if (isSharedView) commitSharedChat();
 
       const descendants = getDescendants(nodeId, nodes, edges);
       const nodesToRemove = new Set([nodeId, ...descendants]);
@@ -504,7 +657,30 @@ const TreeChatInner = () => {
 
       setSelectedNodeId(parentId);
     },
-    [nodes, edges, setNodes, setEdges]
+    [nodes, edges, setNodes, setEdges, isSharedView, commitSharedChat]
+  );
+
+  // Handle toggling collapsed state on a node message
+  const handleToggleCollapse = useCallback(
+    (nodeId, messageType, collapsed) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === nodeId) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                [messageType === "user"
+                  ? "userMessageCollapsed"
+                  : "assistantMessageCollapsed"]: collapsed,
+              },
+            };
+          }
+          return node;
+        })
+      );
+    },
+    [setNodes]
   );
 
   // Toggle context mode on an edge
@@ -651,6 +827,9 @@ const TreeChatInner = () => {
         return;
       }
 
+      // Commit shared chat to storage when user takes action
+      if (isSharedView) commitSharedChat();
+
       const firstNodeId = mergeMode.firstNodeId;
       const secondNodeId = nodeId;
 
@@ -705,6 +884,7 @@ const TreeChatInner = () => {
         onDeleteNode: handleDeleteNode,
         onMergeNode: handleMergeNode,
         onRegenerateMerge: handleRegenerateMerge,
+        onToggleCollapse: handleToggleCollapse,
         isMergeSource: mergeMode?.firstNodeId === node.id,
       },
     }));
@@ -715,6 +895,7 @@ const TreeChatInner = () => {
     handleDeleteNode,
     handleMergeNode,
     handleRegenerateMerge,
+    handleToggleCollapse,
     mergeMode,
   ]);
 
@@ -734,7 +915,13 @@ const TreeChatInner = () => {
     async (userPrompt) => {
       if (!pendingMerge) return;
 
-      const { firstNodeId, secondNodeId, lcaId, branch1Messages, branch2Messages } = pendingMerge;
+      const {
+        firstNodeId,
+        secondNodeId,
+        lcaId,
+        branch1Messages,
+        branch2Messages,
+      } = pendingMerge;
 
       // Get the path to LCA for base context
       const path1 = getPathToNode(firstNodeId, nodes, edges);
@@ -852,6 +1039,8 @@ const TreeChatInner = () => {
       updateNodeData,
       fitView,
       sendChatRequest,
+      isSharedView,
+      commitSharedChat,
     ]
   );
 
@@ -931,6 +1120,7 @@ const TreeChatInner = () => {
             onDeleteChat={deleteChat}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenWaitlist={() => setWaitlistOpen(true)}
+            onShareChat={handleShareChat}
             mergeMode={mergeMode}
             onCancelMerge={() => setMergeMode(null)}
             conversationHistoryLength={conversationHistory.length}
@@ -953,6 +1143,31 @@ const TreeChatInner = () => {
           open={waitlistOpen}
           onClose={() => setWaitlistOpen(false)}
         />
+
+        {/* Share Snackbar */}
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={3000}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert
+            onClose={() => setSnackbar({ ...snackbar, open: false })}
+            severity={snackbar.severity}
+            icon={false}
+            sx={{
+              backgroundColor: colors.bg.secondary,
+              color: colors.text.primary,
+              border: `1px solid ${colors.border.primary}`,
+              borderRadius: 2,
+              "& .MuiAlert-action": {
+                color: colors.text.muted,
+              },
+            }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
       </ReactFlow>
     </Box>
   );
