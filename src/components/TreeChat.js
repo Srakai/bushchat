@@ -62,6 +62,10 @@ const edgeTypes = {
   mergeEdge: MergeEdge,
 };
 
+// Default prompt for merge operations - can be customized by the user before submitting
+const DEFAULT_MERGE_PROMPT =
+  "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
+
 const TreeChatInner = () => {
   // Chat management state
   const [activeChatId, setActiveChatIdState] = useState(() => getActiveChatId());
@@ -93,6 +97,7 @@ const TreeChatInner = () => {
   const [selectedModel, setSelectedModel] = useState(defaultModels[0]);
   const [modelsList, setModelsList] = useState(defaultModels);
   const [mergeMode, setMergeMode] = useState(null);
+  const [pendingMerge, setPendingMerge] = useState(null);
   const nodeIdCounter = useRef(savedState?.nodeIdCounter || 1);
   const { fitView } = useReactFlow();
 
@@ -742,9 +747,9 @@ const TreeChatInner = () => {
     [nodes, edges, selectedModel, updateNodeData, sendChatRequest]
   );
 
-  // Handle merge - first click selects first node, second click performs merge
+  // Handle merge - first click selects first node, second click prepares merge
   const handleMergeNode = useCallback(
-    async (nodeId) => {
+    (nodeId) => {
       if (nodeId === "root") return;
 
       if (!mergeMode) {
@@ -779,12 +784,79 @@ const TreeChatInner = () => {
       const branch1 = path1.slice(lcaIndex1 + 1);
       const branch2 = path2.slice(lcaIndex2 + 1);
 
-      const lcaPath = path1.slice(0, lcaIndex1 + 1);
-      const baseContext = buildConversationFromPath(lcaPath);
-
       const branch1Messages = buildConversationFromPath(branch1);
       const branch2Messages = buildConversationFromPath(branch2);
 
+      // Store pending merge info for when user submits
+      setPendingMerge({
+        firstNodeId,
+        secondNodeId,
+        lcaId,
+        branch1Messages,
+        branch2Messages,
+      });
+
+      // Load the default prompt into the input field for customization
+      setInputMessage(DEFAULT_MERGE_PROMPT);
+      setMergeMode(null);
+
+      // Focus the input field
+      setTimeout(() => {
+        document.getElementById("message-input")?.focus();
+      }, 100);
+    },
+    [mergeMode, nodes, edges]
+  );
+
+  // Inject callbacks into all nodes
+  const nodesWithCallbacks = useMemo(() => {
+    return nodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        onAddBranch: handleAddBranch,
+        onEditNode: handleEditNode,
+        onDeleteNode: handleDeleteNode,
+        onMergeNode: handleMergeNode,
+        onRegenerateMerge: handleRegenerateMerge,
+        isMergeSource: mergeMode?.firstNodeId === node.id,
+      },
+    }));
+  }, [
+    nodes,
+    handleAddBranch,
+    handleEditNode,
+    handleDeleteNode,
+    handleMergeNode,
+    handleRegenerateMerge,
+    mergeMode,
+  ]);
+
+  // Inject callbacks into all edges
+  const edgesWithCallbacks = useMemo(() => {
+    return edges.map((edge) => ({
+      ...edge,
+      data: {
+        ...edge.data,
+        onToggleContextMode: handleToggleContextMode,
+      },
+    }));
+  }, [edges, handleToggleContextMode]);
+
+  // Execute pending merge with user-provided prompt
+  const executePendingMerge = useCallback(
+    async (userPrompt) => {
+      if (!pendingMerge) return;
+
+      const { firstNodeId, secondNodeId, lcaId, branch1Messages, branch2Messages } = pendingMerge;
+
+      // Get the path to LCA for base context
+      const path1 = getPathToNode(firstNodeId, nodes, edges);
+      const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
+      const lcaPath = path1.slice(0, lcaIndex1 + 1);
+      const baseContext = buildConversationFromPath(lcaPath);
+
+      // Build the merged prompt with user's custom message
       let mergedPrompt =
         "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
       mergedPrompt += "=== BRANCH A ===\n";
@@ -796,8 +868,7 @@ const TreeChatInner = () => {
         mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
       }
       mergedPrompt += "=== END BRANCHES ===\n\n";
-      mergedPrompt +=
-        "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
+      mergedPrompt += userPrompt;
 
       const newNodeId = `node-${nodeIdCounter.current++}`;
       const node1 = nodes.find((n) => n.id === firstNodeId);
@@ -811,7 +882,7 @@ const TreeChatInner = () => {
           y: Math.max(node1.position.y, node2.position.y) + 200,
         },
         data: {
-          userMessage: "[Merged from two branches]",
+          userMessage: userPrompt,
           assistantMessage: "",
           status: "loading",
           isRoot: false,
@@ -852,7 +923,7 @@ const TreeChatInner = () => {
       ]);
 
       setSelectedNodeId(newNodeId);
-      setMergeMode(null);
+      setPendingMerge(null);
 
       const conversationMessages = [
         ...baseContext,
@@ -886,7 +957,7 @@ const TreeChatInner = () => {
       setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 100);
     },
     [
-      mergeMode,
+      pendingMerge,
       nodes,
       edges,
       selectedModel,
@@ -900,44 +971,13 @@ const TreeChatInner = () => {
     ]
   );
 
-  // Inject callbacks into all nodes
-  const nodesWithCallbacks = useMemo(() => {
-    return nodes.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        onAddBranch: handleAddBranch,
-        onEditNode: handleEditNode,
-        onDeleteNode: handleDeleteNode,
-        onMergeNode: handleMergeNode,
-        onRegenerateMerge: handleRegenerateMerge,
-        isMergeSource: mergeMode?.firstNodeId === node.id,
-      },
-    }));
-  }, [
-    nodes,
-    handleAddBranch,
-    handleEditNode,
-    handleDeleteNode,
-    handleMergeNode,
-    handleRegenerateMerge,
-    mergeMode,
-  ]);
-
-  // Inject callbacks into all edges
-  const edgesWithCallbacks = useMemo(() => {
-    return edges.map((edge) => ({
-      ...edge,
-      data: {
-        ...edge.data,
-        onToggleContextMode: handleToggleContextMode,
-      },
-    }));
-  }, [edges, handleToggleContextMode]);
-
   // Handle form submit
   const handleSubmit = (message) => {
-    sendMessage(selectedNodeId, message);
+    if (pendingMerge) {
+      executePendingMerge(message);
+    } else {
+      sendMessage(selectedNodeId, message);
+    }
     setInputMessage("");
   };
 
@@ -989,6 +1029,11 @@ const TreeChatInner = () => {
             onModelChange={setSelectedModel}
             modelsList={modelsList}
             isRootSelected={selectedNode?.data?.isRoot}
+            isPendingMerge={!!pendingMerge}
+            onCancelPendingMerge={() => {
+              setPendingMerge(null);
+              setInputMessage("");
+            }}
           />
         </Panel>
 
