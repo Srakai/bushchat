@@ -20,6 +20,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SettingsIcon from "@mui/icons-material/Settings";
 import CloudIcon from "@mui/icons-material/Cloud";
 import ShareIcon from "@mui/icons-material/Share";
+import GitHubIcon from "@mui/icons-material/GitHub";
 import { colors, components, typography } from "../styles/theme";
 
 const InfoPanel = ({
@@ -58,9 +59,25 @@ const InfoPanel = ({
           justifyContent: "space-between",
         }}
       >
-        <Typography variant="subtitle2" sx={{ color: colors.accent.blue }}>
-          bushchat
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Typography variant="subtitle2" sx={{ color: colors.accent.blue }}>
+            bushchat
+          </Typography>
+          <IconButton
+            size="small"
+            component="a"
+            href="https://github.com/Srakai/bushchat"
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{
+              ...components.iconButtonMuted,
+              p: 0.25,
+            }}
+            title="View on GitHub"
+          >
+            <GitHubIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
           <IconButton
             size="small"
