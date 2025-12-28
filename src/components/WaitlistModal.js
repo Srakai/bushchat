@@ -12,9 +12,13 @@ import CloudIcon from "@mui/icons-material/Cloud";
 import { colors, components, typography } from "../styles/theme";
 import { getWaitlistEmail, saveWaitlistEmail } from "../utils/storage";
 
+const FORMSPREE_URL = "https://formspree.io/f/mqeklzzg";
+
 const WaitlistModal = ({ open, onClose }) => {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   // Check if user already signed up
   useEffect(() => {
@@ -25,11 +29,34 @@ const WaitlistModal = ({ open, onClose }) => {
     }
   }, []);
 
-  const handleSubmit = () => {
-    // In production, this would send to a backend/email service
-    console.log("Waitlist signup:", email);
-    saveWaitlistEmail(email);
-    setSubmitted(true);
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(FORMSPREE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          message: "Bushchat Cloud Sync Waitlist Signup",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to submit");
+      }
+
+      saveWaitlistEmail(email);
+      setSubmitted(true);
+    } catch (err) {
+      setError("Failed to submit. Please try again.");
+      console.error("Waitlist signup error:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -109,13 +136,21 @@ const WaitlistModal = ({ open, onClose }) => {
                 type="email"
                 sx={components.textField}
               />
+              {error && (
+                <Typography
+                  variant="caption"
+                  sx={{ color: colors.accent.delete }}
+                >
+                  {error}
+                </Typography>
+              )}
               <Button
                 onClick={handleSubmit}
-                disabled={!email.trim() || !email.includes("@")}
+                disabled={!email.trim() || !email.includes("@") || isSubmitting}
                 fullWidth
                 sx={components.buttonSecondary}
               >
-                Join Waitlist
+                {isSubmitting ? "Submitting..." : "Join Waitlist"}
               </Button>
             </Box>
           )}

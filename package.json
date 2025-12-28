@@ -12,21 +12,22 @@
     "deploy": "touch ./out/.nojekyll && echo 'bushchat.xyz' > ./out/CNAME && gh-pages -d out -t"
   },
   "dependencies": {
-    "@emotion/react": "^11.11.4",
-    "@emotion/styled": "^11.11.5",
-    "@mui/icons-material": "^5.16.0",
-    "@mui/material": "^5.16.0",
-    "axios": "^1.7.2",
-    "next": "14.2.4",
-    "react": "^18",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.6",
+    "@mui/material": "^7.3.6",
+    "axios": "^1.13.2",
+    "next": "16.1.1",
+    "posthog-js": "^1.310.1",
+    "react": "^19",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
-    "react-dom": "^18",
+    "react-dom": "^19",
     "reactflow": "^11.11.4"
   },
   "devDependencies": {
-    "eslint": "^8",
-    "eslint-config-next": "14.2.4",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
     "gh-pages": "^6.3.0"
   }
 }
