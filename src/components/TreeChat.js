@@ -16,48 +16,38 @@ import ReactFlow, {
   Panel,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import {
-  Box,
-  TextField,
-  Button,
-  Select,
-  MenuItem,
-  FormControl,
-  Paper,
-  Typography,
-  IconButton,
-  Collapse,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-  Divider,
-  Modal,
-  Checkbox,
-  FormControlLabel,
-} from "@mui/material";
-import SendIcon from "@mui/icons-material/Send";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import SettingsIcon from "@mui/icons-material/Settings";
-import SyncIcon from "@mui/icons-material/Sync";
-import CloudIcon from "@mui/icons-material/Cloud";
+import { Box } from "@mui/material";
+
+// Components
 import ChatNode from "./ChatNode";
 import MergeEdge, { CONTEXT_MODE } from "./MergeEdge";
-import { colors, components, typography } from "../styles/theme";
+import SettingsModal from "./SettingsModal";
+import WaitlistModal from "./WaitlistModal";
+import InfoPanel from "./InfoPanel";
+import InputPanel from "./InputPanel";
 
-const defaultModels = [
-  "chatgpt-4o-latest",
-  "gpt-4o",
-  "gpt-4o-mini",
-  "gpt-4-turbo",
-  "gpt-4",
-  "gpt-3.5-turbo",
-  "o1-preview",
-  "o1-mini",
-];
+// Utilities
+import { colors } from "../styles/theme";
+import { defaultModels, initialNodes, initialEdges } from "../utils/constants";
+import {
+  getPathToNode,
+  buildConversationFromPath,
+  findLowestCommonAncestor,
+  getDescendants,
+} from "../utils/treeUtils";
+import {
+  loadChatsList,
+  saveChatsList,
+  loadChatState,
+  saveChatState,
+  deleteChatState,
+  getActiveChatId,
+  setActiveChatId,
+  loadSettings,
+  saveSettings,
+  generateChatId,
+} from "../utils/storage";
+import { useChatApi } from "../hooks/useChatApi";
 
 const nodeTypes = {
   chatNode: ChatNode,
@@ -67,291 +57,17 @@ const edgeTypes = {
   mergeEdge: MergeEdge,
 };
 
-const initialNodes = [
-  {
-    id: "root",
-    type: "chatNode",
-    position: { x: 400, y: 50 },
-    data: {
-      isRoot: true,
-      userMessage: "",
-      assistantMessage: "",
-      status: "complete",
-    },
-  },
-];
-
-const initialEdges = [];
-
-// Helper to get path from root to a specific node
-const getPathToNode = (nodeId, nodes, edges) => {
-  const path = [];
-  let currentId = nodeId;
-
-  while (currentId) {
-    const node = nodes.find((n) => n.id === currentId);
-    if (node) {
-      path.unshift(node);
-    }
-
-    // Find parent edge
-    const parentEdge = edges.find((e) => e.target === currentId);
-    currentId = parentEdge ? parentEdge.source : null;
-  }
-
-  return path;
-};
-
-// Build conversation messages from path
-const buildConversationFromPath = (path) => {
-  const messages = [];
-
-  for (const node of path) {
-    if (node.data.isRoot) continue;
-    if (node.data.userMessage) {
-      messages.push({ role: "user", content: node.data.userMessage });
-    }
-    if (node.data.assistantMessage) {
-      messages.push({ role: "assistant", content: node.data.assistantMessage });
-    }
-  }
-
-  return messages;
-};
-
-// Find the lowest common ancestor of two nodes
-const findLowestCommonAncestor = (nodeId1, nodeId2, nodes, edges) => {
-  const path1 = getPathToNode(nodeId1, nodes, edges);
-  const path2 = getPathToNode(nodeId2, nodes, edges);
-
-  const path1Ids = new Set(path1.map((n) => n.id));
-
-  // Walk path2 from node to root, find first match
-  for (let i = path2.length - 1; i >= 0; i--) {
-    if (path1Ids.has(path2[i].id)) {
-      return path2[i].id;
-    }
-  }
-
-  return "root";
-};
-
-// Get all descendants of a node
-const getDescendants = (nodeId, nodes, edges) => {
-  const descendants = [];
-  const queue = [nodeId];
-
-  while (queue.length > 0) {
-    const currentId = queue.shift();
-    const childEdges = edges.filter((e) => e.source === currentId);
-
-    for (const edge of childEdges) {
-      descendants.push(edge.target);
-      queue.push(edge.target);
-    }
-  }
-
-  return descendants;
-};
-
-const CHATS_KEY = "bushchat-chats";
-const ACTIVE_CHAT_KEY = "bushchat-active-chat";
-
-// Generate unique chat ID
-const generateChatId = () =>
-  `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-// Get chat name from nodes (first non-root user message or "New Chat")
-const getChatName = (nodes) => {
-  const firstUserNode = nodes.find(
-    (n) => !n.data?.isRoot && n.data?.userMessage
-  );
-  if (firstUserNode?.data?.userMessage) {
-    const msg = firstUserNode.data.userMessage;
-    return msg.length > 30 ? msg.substring(0, 30) + "..." : msg;
-  }
-  return "New Chat";
-};
-
-// Load all chats list from localStorage
-const loadChatsList = () => {
-  if (typeof window === "undefined") return [];
-  try {
-    const saved = localStorage.getItem(CHATS_KEY);
-    if (saved) {
-      return JSON.parse(saved);
-    }
-  } catch (e) {
-    console.error("Failed to load chats list:", e);
-  }
-  return [];
-};
-
-// Save chats list to localStorage
-const saveChatsList = (chatsList) => {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(CHATS_KEY, JSON.stringify(chatsList));
-  } catch (e) {
-    console.error("Failed to save chats list:", e);
-  }
-};
-
-// Load a specific chat's state
-const loadChatState = (chatId) => {
-  if (typeof window === "undefined") return null;
-  try {
-    const saved = localStorage.getItem(`bushchat-${chatId}`);
-    if (saved) {
-      return JSON.parse(saved);
-    }
-  } catch (e) {
-    console.error("Failed to load chat state:", e);
-  }
-  return null;
-};
-
-// Save a specific chat's state
-const saveChatState = (chatId, nodes, edges, selectedNodeId, nodeIdCounter) => {
-  if (typeof window === "undefined") return;
-  try {
-    // Strip callbacks from nodes before saving
-    const nodesToSave = nodes.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        onAddBranch: undefined,
-        onEditNode: undefined,
-        onDeleteNode: undefined,
-        onMergeNode: undefined,
-        onRegenerateMerge: undefined,
-        isMergeSource: undefined,
-      },
-    }));
-    localStorage.setItem(
-      `bushchat-${chatId}`,
-      JSON.stringify({
-        nodes: nodesToSave,
-        edges,
-        selectedNodeId,
-        nodeIdCounter,
-      })
-    );
-    // Also update chat name in list
-    const chatsList = loadChatsList();
-    const chatIndex = chatsList.findIndex((c) => c.id === chatId);
-    if (chatIndex >= 0) {
-      chatsList[chatIndex].name = getChatName(nodesToSave);
-      chatsList[chatIndex].updatedAt = Date.now();
-      saveChatsList(chatsList);
-    }
-  } catch (e) {
-    console.error("Failed to save chat state:", e);
-  }
-};
-
-// Get or create active chat ID
-const getActiveChatId = () => {
-  if (typeof window === "undefined") return null;
-  try {
-    let activeId = localStorage.getItem(ACTIVE_CHAT_KEY);
-    if (!activeId) {
-      // Create initial chat
-      activeId = generateChatId();
-      localStorage.setItem(ACTIVE_CHAT_KEY, activeId);
-      const chatsList = [
-        {
-          id: activeId,
-          name: "New Chat",
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-      ];
-      saveChatsList(chatsList);
-    }
-    return activeId;
-  } catch (e) {
-    console.error("Failed to get active chat:", e);
-  }
-  return generateChatId();
-};
-
-// Set active chat ID
-const setActiveChatId = (chatId) => {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(ACTIVE_CHAT_KEY, chatId);
-};
-
-const SETTINGS_KEY = "bushchat-settings";
-const API_KEY_STORAGE_KEY = "bushchat-api-key";
-
-// Load settings from localStorage
-const loadSettings = () => {
-  if (typeof window === "undefined")
-    return { apiKey: "", apiUrl: "", saveApiKey: false };
-  try {
-    const saved = localStorage.getItem(SETTINGS_KEY);
-    const savedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    const settings = saved
-      ? JSON.parse(saved)
-      : { apiUrl: "", saveApiKey: false };
-    // Load API key separately if it was saved
-    if (savedApiKey && settings.saveApiKey) {
-      settings.apiKey = savedApiKey;
-    } else {
-      settings.apiKey = "";
-    }
-    return settings;
-  } catch (e) {
-    console.error("Failed to load settings:", e);
-  }
-  return { apiKey: "", apiUrl: "", saveApiKey: false };
-};
-
-// Save settings to localStorage
-const saveSettings = (settings, shouldSaveApiKey) => {
-  if (typeof window === "undefined") return;
-  try {
-    // Save non-sensitive settings
-    const settingsToSave = {
-      apiUrl: settings.apiUrl,
-      saveApiKey: shouldSaveApiKey,
-    };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsToSave));
-
-    // Handle API key separately
-    if (shouldSaveApiKey && settings.apiKey) {
-      localStorage.setItem(API_KEY_STORAGE_KEY, settings.apiKey);
-    } else {
-      // Explicitly remove API key when unchecked
-      localStorage.removeItem(API_KEY_STORAGE_KEY);
-    }
-  } catch (e) {
-    console.error("Failed to save settings:", e);
-  }
-};
-
 const TreeChatInner = () => {
   // Chat management state
-  const [activeChatId, setActiveChatIdState] = useState(() =>
-    getActiveChatId()
-  );
+  const [activeChatId, setActiveChatIdState] = useState(() => getActiveChatId());
   const [chatsList, setChatsList] = useState(() => loadChatsList());
-  const [chatsExpanded, setChatsExpanded] = useState(false);
 
   // Settings state
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(() => loadSettings());
-  const [tempSettings, setTempSettings] = useState({
-    apiKey: "",
-    apiUrl: "",
-    saveApiKey: false,
-  });
 
-  // Cloud waitlist state
+  // Waitlist modal state
   const [waitlistOpen, setWaitlistOpen] = useState(false);
-  const [waitlistEmail, setWaitlistEmail] = useState("");
-  const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
 
   // Load initial state from localStorage or use defaults
   const savedState = useMemo(() => loadChatState(activeChatId), [activeChatId]);
@@ -368,10 +84,12 @@ const TreeChatInner = () => {
   const [inputMessage, setInputMessage] = useState("");
   const [selectedModel, setSelectedModel] = useState(defaultModels[0]);
   const [modelsList, setModelsList] = useState(defaultModels);
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [mergeMode, setMergeMode] = useState(null);
   const nodeIdCounter = useRef(savedState?.nodeIdCounter || 1);
   const { fitView } = useReactFlow();
+
+  // Chat API hook
+  const { sendChatRequest } = useChatApi(settings);
 
   // Auto-save to localStorage whenever nodes or edges change
   useEffect(() => {
@@ -437,7 +155,7 @@ const TreeChatInner = () => {
       setChatsList(updatedList);
 
       // Remove chat data
-      localStorage.removeItem(`bushchat-${chatId}`);
+      deleteChatState(chatId);
 
       // If deleting active chat, switch to first available
       if (chatId === activeChatId && updatedList.length > 0) {
@@ -447,98 +165,55 @@ const TreeChatInner = () => {
     [chatsList, activeChatId, switchToChat]
   );
 
-  // Open settings modal
-  const handleOpenSettings = useCallback(() => {
-    setTempSettings({ ...settings });
-    setSettingsOpen(true);
-  }, [settings]);
-
-  // Save settings
-  const handleSaveSettings = useCallback(() => {
-    setSettings(tempSettings);
-    saveSettings(tempSettings, tempSettings.saveApiKey);
-    setSettingsOpen(false);
-  }, [tempSettings]);
-
-  // Handle waitlist submission
-  const handleWaitlistSubmit = useCallback(() => {
-    // In production, this would send to a backend/email service
-    console.log("Waitlist signup:", waitlistEmail);
-    // Store locally to remember they signed up
-    if (typeof window !== "undefined") {
-      localStorage.setItem("bushchat-waitlist-email", waitlistEmail);
-    }
-    setWaitlistSubmitted(true);
-  }, [waitlistEmail]);
-
-  // Check if user already signed up
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedEmail = localStorage.getItem("bushchat-waitlist-email");
-      if (savedEmail) {
-        setWaitlistEmail(savedEmail);
-        setWaitlistSubmitted(true);
-      }
-    }
+  // Save settings handler
+  const handleSaveSettings = useCallback((newSettings) => {
+    setSettings(newSettings);
+    saveSettings(newSettings, newSettings.saveApiKey);
   }, []);
-
-  // Fetch models from API (can use tempSettings for modal or settings for auto-load)
-  const fetchModelsWithConfig = useCallback(async (apiKey, apiUrl) => {
-    setIsLoadingModels(true);
-    try {
-      const url = apiUrl || "https://api.openai.com/v1";
-
-      const response = await fetch(`${url}/models`, {
-        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch models");
-      }
-
-      const data = await response.json();
-      const fetchedModels =
-        data.data
-          ?.map((m) => m.id)
-          ?.filter(
-            (id) =>
-              id &&
-              !id.includes("embedding") &&
-              !id.includes("whisper") &&
-              !id.includes("tts") &&
-              !id.includes("dall-e")
-          )
-          ?.sort() || [];
-
-      if (fetchedModels.length > 0) {
-        setModelsList(fetchedModels);
-        // If current model not in list, select first one
-        setSelectedModel((current) =>
-          fetchedModels.includes(current) ? current : fetchedModels[0]
-        );
-      }
-    } catch (error) {
-      console.error("Failed to fetch models:", error);
-      // Keep existing models list on error
-    } finally {
-      setIsLoadingModels(false);
-    }
-  }, []);
-
-  // Wrapper for modal button (uses tempSettings)
-  const fetchModels = useCallback(() => {
-    fetchModelsWithConfig(tempSettings.apiKey, tempSettings.apiUrl);
-  }, [tempSettings, fetchModelsWithConfig]);
 
   // Auto-fetch models on startup if API key is configured
   const initialFetchDone = useRef(false);
   useEffect(() => {
-    // Fetch if we have an API key OR a custom URL (local LLMs often don't need auth)
     if (!initialFetchDone.current && (settings.apiKey || settings.apiUrl)) {
       initialFetchDone.current = true;
-      fetchModelsWithConfig(settings.apiKey, settings.apiUrl);
+      const fetchModels = async () => {
+        try {
+          const url = settings.apiUrl || "https://api.openai.com/v1";
+          const response = await fetch(`${url}/models`, {
+            headers: settings.apiKey
+              ? { Authorization: `Bearer ${settings.apiKey}` }
+              : {},
+          });
+
+          if (!response.ok) return;
+
+          const data = await response.json();
+          const fetchedModels =
+            data.data
+              ?.map((m) => m.id)
+              ?.filter(
+                (id) =>
+                  id &&
+                  !id.includes("embedding") &&
+                  !id.includes("whisper") &&
+                  !id.includes("tts") &&
+                  !id.includes("dall-e")
+              )
+              ?.sort() || [];
+
+          if (fetchedModels.length > 0) {
+            setModelsList(fetchedModels);
+            setSelectedModel((current) =>
+              fetchedModels.includes(current) ? current : fetchedModels[0]
+            );
+          }
+        } catch (error) {
+          console.error("Failed to fetch models:", error);
+        }
+      };
+      fetchModels();
     }
-  }, [settings.apiKey, settings.apiUrl, fetchModelsWithConfig]);
+  }, [settings.apiKey, settings.apiUrl]);
 
   // Get the selected node
   const selectedNode = useMemo(
@@ -620,100 +295,40 @@ const TreeChatInner = () => {
       const conversationMessages = buildConversationFromPath(path);
       conversationMessages.push({ role: "user", content: userMessage });
 
-      try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: conversationMessages,
-            model: selectedModel,
-            apiKey: settings.apiKey || undefined,
-            apiUrl: settings.apiUrl || undefined,
-          }),
-        });
-
-        // Check if streaming response
-        const contentType = response.headers.get("content-type");
-        const isStreaming = contentType?.includes("text/event-stream");
-
-        if (isStreaming) {
-          // Handle streaming response
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let fullResponse = "";
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value);
-            const lines = chunk
-              .split("\n")
-              .filter((line) => line.startsWith("data: "));
-
-            for (const line of lines) {
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  fullResponse += parsed.content;
-                  updateNodeData(newNodeId, {
-                    assistantMessage: fullResponse,
-                    status: "loading",
-                  });
-                }
-              } catch (e) {
-                // Skip malformed JSON
-              }
-            }
-          }
-
+      // Send request
+      await sendChatRequest(
+        conversationMessages,
+        selectedModel,
+        (partialResponse) => {
+          updateNodeData(newNodeId, {
+            assistantMessage: partialResponse,
+            status: "loading",
+          });
+        },
+        (fullResponse) => {
           updateNodeData(newNodeId, {
             assistantMessage: fullResponse,
             status: "complete",
           });
-        } else {
-          // Handle non-streaming response
-          const data = await response.json();
-
-          if (!response.ok) {
-            throw new Error(data.error || "Failed to get response");
-          }
-
+        },
+        (error) => {
+          console.error(error);
           updateNodeData(newNodeId, {
-            assistantMessage: data.response,
-            status: "complete",
+            error: error.message,
+            status: "error",
           });
         }
-      } catch (error) {
-        console.error(error);
-        updateNodeData(newNodeId, {
-          error: error.message,
-          status: "error",
-        });
-      }
+      );
 
       // Fit view after adding node
       setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 100);
     },
-    [
-      nodes,
-      edges,
-      selectedModel,
-      setNodes,
-      setEdges,
-      updateNodeData,
-      fitView,
-      settings,
-    ]
+    [nodes, edges, selectedModel, setNodes, setEdges, updateNodeData, fitView, sendChatRequest]
   );
 
   // Handle adding a branch from a node
   const handleAddBranch = useCallback((nodeId) => {
     setSelectedNodeId(nodeId);
-    // Focus the input
     document.getElementById("message-input")?.focus();
   }, []);
 
@@ -726,11 +341,9 @@ const TreeChatInner = () => {
 
       // Check if this is a merged node
       if (node?.data?.isMergedNode && node.data.mergeParents) {
-        // Handle merged node edit - use merge context
         const [firstNodeId, secondNodeId] = node.data.mergeParents;
         const lcaId = node.data.lcaId;
 
-        // Get the merge edges and their context modes
         const edge1 = edges.find(
           (e) => e.source === firstNodeId && e.target === nodeId
         );
@@ -741,14 +354,12 @@ const TreeChatInner = () => {
         const contextMode1 = edge1?.data?.contextMode || CONTEXT_MODE.SINGLE;
         const contextMode2 = edge2?.data?.contextMode || CONTEXT_MODE.SINGLE;
 
-        // Get paths from LCA to each node
         const path1 = getPathToNode(firstNodeId, nodes, edges);
         const path2 = getPathToNode(secondNodeId, nodes, edges);
 
         const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
         const lcaIndex2 = path2.findIndex((n) => n.id === lcaId);
 
-        // Get branch content based on context mode
         let branch1, branch2;
         if (contextMode1 === CONTEXT_MODE.FULL) {
           branch1 = path1.slice(lcaIndex1 + 1);
@@ -764,7 +375,6 @@ const TreeChatInner = () => {
           branch2 = lastNode ? [lastNode] : [];
         }
 
-        // Build merged context
         const lcaPath = path1.slice(0, lcaIndex1 + 1);
         const baseContext = buildConversationFromPath(lcaPath);
 
@@ -772,13 +382,9 @@ const TreeChatInner = () => {
         const branch2Messages = buildConversationFromPath(branch2);
 
         const mode1Label =
-          contextMode1 === CONTEXT_MODE.FULL
-            ? "full context"
-            : "single message";
+          contextMode1 === CONTEXT_MODE.FULL ? "full context" : "single message";
         const mode2Label =
-          contextMode2 === CONTEXT_MODE.FULL
-            ? "full context"
-            : "single message";
+          contextMode2 === CONTEXT_MODE.FULL ? "full context" : "single message";
 
         let mergedContext =
           "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
@@ -793,7 +399,6 @@ const TreeChatInner = () => {
         mergedContext += "=== END BRANCHES ===\n\n";
         mergedContext += newUserMessage;
 
-        // Update the user message
         updateNodeData(nodeId, {
           userMessage: newUserMessage,
           assistantMessage: "",
@@ -806,80 +411,33 @@ const TreeChatInner = () => {
           { role: "user", content: mergedContext },
         ];
 
-        try {
-          const response = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              messages: conversationMessages,
-              model: selectedModel,
-              apiKey: settings.apiKey || undefined,
-              apiUrl: settings.apiUrl || undefined,
-            }),
-          });
-
-          const contentType = response.headers.get("content-type");
-          const isStreaming = contentType?.includes("text/event-stream");
-
-          if (isStreaming) {
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let fullResponse = "";
-
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              const chunk = decoder.decode(value);
-              const lines = chunk
-                .split("\n")
-                .filter((line) => line.startsWith("data: "));
-
-              for (const line of lines) {
-                const data = line.slice(6);
-                if (data === "[DONE]") continue;
-
-                try {
-                  const parsed = JSON.parse(data);
-                  if (parsed.content) {
-                    fullResponse += parsed.content;
-                    updateNodeData(nodeId, {
-                      assistantMessage: fullResponse,
-                      status: "loading",
-                    });
-                  }
-                } catch (e) {
-                  // Skip malformed JSON
-                }
-              }
-            }
-
+        await sendChatRequest(
+          conversationMessages,
+          selectedModel,
+          (partialResponse) => {
+            updateNodeData(nodeId, {
+              assistantMessage: partialResponse,
+              status: "loading",
+            });
+          },
+          (fullResponse) => {
             updateNodeData(nodeId, {
               assistantMessage: fullResponse,
               status: "complete",
             });
-          } else {
-            const data = await response.json();
-            if (!response.ok) {
-              throw new Error(data.error || "Failed to get response");
-            }
+          },
+          (error) => {
+            console.error(error);
             updateNodeData(nodeId, {
-              assistantMessage: data.response,
-              status: "complete",
+              error: error.message,
+              status: "error",
             });
           }
-        } catch (error) {
-          console.error(error);
-          updateNodeData(nodeId, {
-            error: error.message,
-            status: "error",
-          });
-        }
+        );
         return;
       }
 
-      // Regular node edit - original logic
-      // Update the user message
+      // Regular node edit
       updateNodeData(nodeId, {
         userMessage: newUserMessage,
         assistantMessage: "",
@@ -887,86 +445,38 @@ const TreeChatInner = () => {
         error: null,
       });
 
-      // Get parent of this node
       const parentEdge = edges.find((e) => e.target === nodeId);
       const parentNodeId = parentEdge?.source || "root";
 
-      // Build conversation context from parent
       const path = getPathToNode(parentNodeId, nodes, edges);
       const conversationMessages = buildConversationFromPath(path);
       conversationMessages.push({ role: "user", content: newUserMessage });
 
-      try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: conversationMessages,
-            model: selectedModel,
-            apiKey: settings.apiKey || undefined,
-            apiUrl: settings.apiUrl || undefined,
-          }),
-        });
-
-        const contentType = response.headers.get("content-type");
-        const isStreaming = contentType?.includes("text/event-stream");
-
-        if (isStreaming) {
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let fullResponse = "";
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value);
-            const lines = chunk
-              .split("\n")
-              .filter((line) => line.startsWith("data: "));
-
-            for (const line of lines) {
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  fullResponse += parsed.content;
-                  updateNodeData(nodeId, {
-                    assistantMessage: fullResponse,
-                    status: "loading",
-                  });
-                }
-              } catch (e) {
-                // Skip malformed JSON
-              }
-            }
-          }
-
+      await sendChatRequest(
+        conversationMessages,
+        selectedModel,
+        (partialResponse) => {
+          updateNodeData(nodeId, {
+            assistantMessage: partialResponse,
+            status: "loading",
+          });
+        },
+        (fullResponse) => {
           updateNodeData(nodeId, {
             assistantMessage: fullResponse,
             status: "complete",
           });
-        } else {
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.error || "Failed to get response");
-          }
+        },
+        (error) => {
+          console.error(error);
           updateNodeData(nodeId, {
-            assistantMessage: data.response,
-            status: "complete",
+            error: error.message,
+            status: "error",
           });
         }
-      } catch (error) {
-        console.error(error);
-        updateNodeData(nodeId, {
-          error: error.message,
-          status: "error",
-        });
-      }
+      );
     },
-    [nodes, edges, selectedModel, updateNodeData, settings]
+    [nodes, edges, selectedModel, updateNodeData, sendChatRequest]
   );
 
   // Handle deleting a node and its descendants
@@ -977,7 +487,6 @@ const TreeChatInner = () => {
       const descendants = getDescendants(nodeId, nodes, edges);
       const nodesToRemove = new Set([nodeId, ...descendants]);
 
-      // Find parent to select after deletion
       const parentEdge = edges.find((e) => e.target === nodeId);
       const parentId = parentEdge?.source || "root";
 
@@ -993,7 +502,7 @@ const TreeChatInner = () => {
     [nodes, edges, setNodes, setEdges]
   );
 
-  // Toggle context mode on an edge (full vs single message)
+  // Toggle context mode on an edge
   const handleToggleContextMode = useCallback(
     (edgeId) => {
       setEdges((eds) =>
@@ -1028,7 +537,6 @@ const TreeChatInner = () => {
       const [firstNodeId, secondNodeId] = node.data.mergeParents;
       const lcaId = node.data.lcaId;
 
-      // Get the merge edges and their context modes
       const edge1 = edges.find(
         (e) => e.source === firstNodeId && e.target === nodeId
       );
@@ -1039,19 +547,16 @@ const TreeChatInner = () => {
       const contextMode1 = edge1?.data?.contextMode || CONTEXT_MODE.FULL;
       const contextMode2 = edge2?.data?.contextMode || CONTEXT_MODE.FULL;
 
-      // Get paths from LCA to each node
       const path1 = getPathToNode(firstNodeId, nodes, edges);
       const path2 = getPathToNode(secondNodeId, nodes, edges);
 
       const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
       const lcaIndex2 = path2.findIndex((n) => n.id === lcaId);
 
-      // Get branch content based on context mode
       let branch1, branch2;
       if (contextMode1 === CONTEXT_MODE.FULL) {
         branch1 = path1.slice(lcaIndex1 + 1);
       } else {
-        // Single message mode - only the last node
         const lastNode = path1[path1.length - 1];
         branch1 = lastNode ? [lastNode] : [];
       }
@@ -1059,16 +564,13 @@ const TreeChatInner = () => {
       if (contextMode2 === CONTEXT_MODE.FULL) {
         branch2 = path2.slice(lcaIndex2 + 1);
       } else {
-        // Single message mode - only the last node
         const lastNode = path2[path2.length - 1];
         branch2 = lastNode ? [lastNode] : [];
       }
 
-      // Build merged context message
       const lcaPath = path1.slice(0, lcaIndex1 + 1);
       const baseContext = buildConversationFromPath(lcaPath);
 
-      // Build branch summaries
       const branch1Messages = buildConversationFromPath(branch1);
       const branch2Messages = buildConversationFromPath(branch2);
 
@@ -1091,90 +593,42 @@ const TreeChatInner = () => {
       mergedPrompt +=
         "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
 
-      // Update node to loading state
       updateNodeData(nodeId, {
         assistantMessage: "",
         status: "loading",
         error: null,
       });
 
-      // Send merged context to API
       const conversationMessages = [
         ...baseContext,
         { role: "user", content: mergedPrompt },
       ];
 
-      try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: conversationMessages,
-            model: selectedModel,
-            apiKey: settings.apiKey || undefined,
-            apiUrl: settings.apiUrl || undefined,
-          }),
-        });
-
-        const contentType = response.headers.get("content-type");
-        const isStreaming = contentType?.includes("text/event-stream");
-
-        if (isStreaming) {
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let fullResponse = "";
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value);
-            const lines = chunk
-              .split("\n")
-              .filter((line) => line.startsWith("data: "));
-
-            for (const line of lines) {
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  fullResponse += parsed.content;
-                  updateNodeData(nodeId, {
-                    assistantMessage: fullResponse,
-                    status: "loading",
-                  });
-                }
-              } catch (e) {
-                // Skip malformed JSON
-              }
-            }
-          }
-
+      await sendChatRequest(
+        conversationMessages,
+        selectedModel,
+        (partialResponse) => {
+          updateNodeData(nodeId, {
+            assistantMessage: partialResponse,
+            status: "loading",
+          });
+        },
+        (fullResponse) => {
           updateNodeData(nodeId, {
             assistantMessage: fullResponse,
             status: "complete",
           });
-        } else {
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.error || "Failed to get response");
-          }
+        },
+        (error) => {
+          console.error(error);
           updateNodeData(nodeId, {
-            assistantMessage: data.response,
-            status: "complete",
+            error: error.message,
+            status: "error",
           });
         }
-      } catch (error) {
-        console.error(error);
-        updateNodeData(nodeId, {
-          error: error.message,
-          status: "error",
-        });
-      }
+      );
     },
-    [nodes, edges, selectedModel, updateNodeData, settings]
+    [nodes, edges, selectedModel, updateNodeData, sendChatRequest]
   );
 
   // Handle merge - first click selects first node, second click performs merge
@@ -1183,22 +637,18 @@ const TreeChatInner = () => {
       if (nodeId === "root") return;
 
       if (!mergeMode) {
-        // First node selected - enter merge mode
         setMergeMode({ firstNodeId: nodeId });
         return;
       }
 
       if (mergeMode.firstNodeId === nodeId) {
-        // Same node clicked - cancel merge
         setMergeMode(null);
         return;
       }
 
-      // Second node selected - perform merge
       const firstNodeId = mergeMode.firstNodeId;
       const secondNodeId = nodeId;
 
-      // Find lowest common ancestor
       const lcaId = findLowestCommonAncestor(
         firstNodeId,
         secondNodeId,
@@ -1206,7 +656,6 @@ const TreeChatInner = () => {
         edges
       );
 
-      // Get paths from LCA to each node (excluding LCA)
       const path1 = getPathToNode(firstNodeId, nodes, edges);
       const path2 = getPathToNode(secondNodeId, nodes, edges);
 
@@ -1216,11 +665,9 @@ const TreeChatInner = () => {
       const branch1 = path1.slice(lcaIndex1 + 1);
       const branch2 = path2.slice(lcaIndex2 + 1);
 
-      // Build merged context message
       const lcaPath = path1.slice(0, lcaIndex1 + 1);
       const baseContext = buildConversationFromPath(lcaPath);
 
-      // Build branch summaries
       const branch1Messages = buildConversationFromPath(branch1);
       const branch2Messages = buildConversationFromPath(branch2);
 
@@ -1238,7 +685,6 @@ const TreeChatInner = () => {
       mergedPrompt +=
         "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
 
-      // Create a new merged node
       const newNodeId = `node-${nodeIdCounter.current++}`;
       const node1 = nodes.find((n) => n.id === firstNodeId);
       const node2 = nodes.find((n) => n.id === secondNodeId);
@@ -1261,11 +707,9 @@ const TreeChatInner = () => {
         },
       };
 
-      // Store edge IDs for context mode lookup
       const edge1Id = `edge-${firstNodeId}-${newNodeId}`;
       const edge2Id = `edge-${secondNodeId}-${newNodeId}`;
 
-      // Add node and edges from both parents
       setNodes((nds) => [...nds, newNode]);
       setEdges((eds) => [
         ...eds,
@@ -1296,81 +740,34 @@ const TreeChatInner = () => {
       setSelectedNodeId(newNodeId);
       setMergeMode(null);
 
-      // Send merged context to API
       const conversationMessages = [
         ...baseContext,
         { role: "user", content: mergedPrompt },
       ];
 
-      try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: conversationMessages,
-            model: selectedModel,
-            apiKey: settings.apiKey || undefined,
-            apiUrl: settings.apiUrl || undefined,
-          }),
-        });
-
-        const contentType = response.headers.get("content-type");
-        const isStreaming = contentType?.includes("text/event-stream");
-
-        if (isStreaming) {
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let fullResponse = "";
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value);
-            const lines = chunk
-              .split("\n")
-              .filter((line) => line.startsWith("data: "));
-
-            for (const line of lines) {
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  fullResponse += parsed.content;
-                  updateNodeData(newNodeId, {
-                    assistantMessage: fullResponse,
-                    status: "loading",
-                  });
-                }
-              } catch (e) {
-                // Skip malformed JSON
-              }
-            }
-          }
-
+      await sendChatRequest(
+        conversationMessages,
+        selectedModel,
+        (partialResponse) => {
+          updateNodeData(newNodeId, {
+            assistantMessage: partialResponse,
+            status: "loading",
+          });
+        },
+        (fullResponse) => {
           updateNodeData(newNodeId, {
             assistantMessage: fullResponse,
             status: "complete",
           });
-        } else {
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.error || "Failed to get response");
-          }
+        },
+        (error) => {
+          console.error(error);
           updateNodeData(newNodeId, {
-            assistantMessage: data.response,
-            status: "complete",
+            error: error.message,
+            status: "error",
           });
         }
-      } catch (error) {
-        console.error(error);
-        updateNodeData(newNodeId, {
-          error: error.message,
-          status: "error",
-        });
-      }
+      );
 
       setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 100);
     },
@@ -1383,7 +780,7 @@ const TreeChatInner = () => {
       setEdges,
       updateNodeData,
       fitView,
-      settings,
+      sendChatRequest,
     ]
   );
 
@@ -1423,12 +820,9 @@ const TreeChatInner = () => {
   }, [edges, handleToggleContextMode]);
 
   // Handle form submit
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (inputMessage.trim()) {
-      sendMessage(selectedNodeId, inputMessage.trim());
-      setInputMessage("");
-    }
+  const handleSubmit = (message) => {
+    sendMessage(selectedNodeId, message);
+    setInputMessage("");
   };
 
   // Handle node selection
@@ -1471,476 +865,49 @@ const TreeChatInner = () => {
 
         {/* Input Panel */}
         <Panel position="bottom-center">
-          <Paper
-            component="form"
+          <InputPanel
+            inputMessage={inputMessage}
+            onInputChange={setInputMessage}
             onSubmit={handleSubmit}
-            sx={{
-              ...components.panel,
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              p: 1.5,
-              minWidth: 600,
-              mb: 2,
-            }}
-          >
-            <TextField
-              id="message-input"
-              placeholder={
-                selectedNode?.data?.isRoot
-                  ? "Start a new conversation..."
-                  : "Continue or branch from selected node..."
-              }
-              variant="outlined"
-              size="small"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              fullWidth
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              sx={components.textField}
-            />
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-              <Select
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                sx={components.select}
-              >
-                {modelsList.map((model) => (
-                  <MenuItem key={model} value={model}>
-                    {model}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <IconButton
-              type="submit"
-              disabled={!inputMessage.trim()}
-              sx={components.buttonPrimary}
-            >
-              <SendIcon />
-            </IconButton>
-          </Paper>
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+            modelsList={modelsList}
+            isRootSelected={selectedNode?.data?.isRoot}
+          />
         </Panel>
 
         {/* Info Panel */}
         <Panel position="top-left">
-          <Paper
-            sx={{
-              ...components.panel,
-              border: mergeMode
-                ? `1px solid ${colors.accent.orange}`
-                : `1px solid ${colors.border.primary}`,
-              minWidth: 220,
-              maxWidth: 280,
-              overflow: "hidden",
-            }}
-          >
-            {/* Header with settings */}
-            <Box
-              sx={{
-                p: 1.5,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <Typography
-                variant="subtitle2"
-                sx={{ color: colors.accent.blue }}
-              >
-                bushchat
-              </Typography>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <IconButton
-                  size="small"
-                  onClick={() => setWaitlistOpen(true)}
-                  sx={components.iconButtonMuted}
-                  title="Sync to Cloud (Coming Soon)"
-                >
-                  <CloudIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={handleOpenSettings}
-                  sx={components.iconButtonMuted}
-                >
-                  <SettingsIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            </Box>
-
-            <Divider sx={components.divider} />
-
-            {/* Collapsible Chats section */}
-            <Box sx={{ p: 1 }}>
-              <Box
-                onClick={() => setChatsExpanded(!chatsExpanded)}
-                sx={{
-                  ...components.hoverBox,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  py: 0.5,
-                  px: 0.5,
-                  mx: -0.5,
-                }}
-              >
-                <Typography variant="caption" sx={typography.muted}>
-                  Chats
-                </Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                  <IconButton
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      createNewChat();
-                    }}
-                    sx={{ color: colors.accent.blue, p: 0.25 }}
-                  >
-                    <AddIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                  {chatsExpanded ? (
-                    <ExpandLessIcon
-                      sx={{ fontSize: 16, color: colors.text.muted }}
-                    />
-                  ) : (
-                    <ExpandMoreIcon
-                      sx={{ fontSize: 16, color: colors.text.muted }}
-                    />
-                  )}
-                </Box>
-              </Box>
-              <Collapse in={chatsExpanded}>
-                <List dense sx={{ py: 0.5, maxHeight: 200, overflow: "auto" }}>
-                  {chatsList.map((chat) => (
-                    <ListItem
-                      key={chat.id}
-                      disablePadding
-                      secondaryAction={
-                        chatsList.length > 1 && (
-                          <IconButton
-                            edge="end"
-                            size="small"
-                            onClick={(e) => deleteChat(chat.id, e)}
-                            sx={{
-                              color: colors.text.dim,
-                              "&:hover": { color: colors.accent.delete },
-                              p: 0.5,
-                            }}
-                          >
-                            <DeleteOutlineIcon fontSize="small" />
-                          </IconButton>
-                        )
-                      }
-                    >
-                      <ListItemButton
-                        selected={chat.id === activeChatId}
-                        onClick={() => switchToChat(chat.id)}
-                        sx={components.listItemButton}
-                      >
-                        <ListItemText
-                          primary={chat.name}
-                          primaryTypographyProps={{
-                            variant: "caption",
-                            sx: {
-                              color:
-                                chat.id === activeChatId
-                                  ? colors.text.primary
-                                  : colors.text.secondary,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            },
-                          }}
-                        />
-                      </ListItemButton>
-                    </ListItem>
-                  ))}
-                </List>
-              </Collapse>
-            </Box>
-
-            <Divider sx={components.divider} />
-
-            {/* Info section - always visible */}
-            <Box sx={{ p: 1.5 }}>
-              {mergeMode ? (
-                <>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: colors.accent.orange,
-                      display: "block",
-                      fontWeight: 500,
-                    }}
-                  >
-                    🔀 Merge Mode Active
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{ ...typography.muted, display: "block", mt: 0.5 }}
-                  >
-                    Click another node to merge, or click the same node to
-                    cancel
-                  </Typography>
-                  <Button
-                    size="small"
-                    onClick={() => setMergeMode(null)}
-                    sx={{
-                      mt: 1,
-                      color: colors.accent.orange,
-                      borderColor: colors.accent.orange,
-                      "&:hover": {
-                        borderColor: colors.accent.orangeHover,
-                        backgroundColor: "rgba(255,152,0,0.1)",
-                      },
-                    }}
-                    variant="outlined"
-                  >
-                    Cancel Merge
-                  </Button>
-                </>
-              ) : (
-                <Typography
-                  variant="caption"
-                  sx={{ ...typography.muted, display: "block" }}
-                >
-                  (+) branch • Edit/Delete on hover • Merge icon to combine
-                </Typography>
-              )}
-              {conversationHistory.length > 0 && (
-                <Typography
-                  variant="caption"
-                  sx={{ ...typography.dim, display: "block", mt: 0.5 }}
-                >
-                  Context: {conversationHistory.length} messages
-                </Typography>
-              )}
-            </Box>
-          </Paper>
+          <InfoPanel
+            chatsList={chatsList}
+            activeChatId={activeChatId}
+            onCreateNewChat={createNewChat}
+            onSwitchChat={switchToChat}
+            onDeleteChat={deleteChat}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenWaitlist={() => setWaitlistOpen(true)}
+            mergeMode={mergeMode}
+            onCancelMerge={() => setMergeMode(null)}
+            conversationHistoryLength={conversationHistory.length}
+          />
         </Panel>
 
         {/* Settings Modal */}
-        <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)}>
-          <Paper
-            sx={{
-              ...components.modal,
-              minWidth: 400,
-              maxWidth: 500,
-            }}
-          >
-            <Typography variant="h6" sx={{ color: colors.text.primary, mb: 2 }}>
-              Settings
-            </Typography>
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <TextField
-                label="API Key"
-                type="password"
-                value={tempSettings.apiKey}
-                onChange={(e) =>
-                  setTempSettings({ ...tempSettings, apiKey: e.target.value })
-                }
-                placeholder="sk-... (leave empty to use server .env)"
-                fullWidth
-                size="small"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                sx={components.textFieldWithLabel}
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={tempSettings.saveApiKey}
-                    onChange={(e) =>
-                      setTempSettings({
-                        ...tempSettings,
-                        saveApiKey: e.target.checked,
-                      })
-                    }
-                    sx={components.checkbox}
-                  />
-                }
-                label={
-                  <Typography variant="body2" sx={typography.secondary}>
-                    🙈 Save API key in browser storage
-                  </Typography>
-                }
-              />
-              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-                <TextField
-                  label="OpenAI Compatible URL"
-                  value={tempSettings.apiUrl}
-                  onChange={(e) =>
-                    setTempSettings({ ...tempSettings, apiUrl: e.target.value })
-                  }
-                  placeholder="https://api.openai.com/v1 (leave empty for default)"
-                  fullWidth
-                  size="small"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  sx={components.textFieldWithLabel}
-                />
-                <IconButton
-                  onClick={fetchModels}
-                  disabled={isLoadingModels}
-                  sx={{
-                    mt: 0.5,
-                    color: colors.accent.blue,
-                    "&:hover": { backgroundColor: "rgba(74, 158, 255, 0.1)" },
-                    "&.Mui-disabled": { color: colors.text.dim },
-                    animation: isLoadingModels
-                      ? "spin 1s linear infinite"
-                      : "none",
-                    "@keyframes spin": {
-                      "0%": { transform: "rotate(0deg)" },
-                      "100%": { transform: "rotate(360deg)" },
-                    },
-                  }}
-                  title="Fetch models from API"
-                >
-                  <SyncIcon />
-                </IconButton>
-              </Box>
-              {modelsList.length > 0 && modelsList !== defaultModels && (
-                <Typography variant="caption" sx={typography.accent}>
-                  ✓ Loaded {modelsList.length} models from provider
-                </Typography>
-              )}
-              <Typography variant="caption" sx={typography.dim}>
-                These settings override the server .env configuration. Leave
-                empty to use server defaults.
-              </Typography>
-              <Box
-                sx={{
-                  display: "flex",
-                  gap: 1,
-                  justifyContent: "flex-end",
-                  mt: 1,
-                }}
-              >
-                <Button
-                  onClick={() => setSettingsOpen(false)}
-                  sx={typography.muted}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSaveSettings}
-                  variant="contained"
-                  sx={components.buttonPrimary}
-                >
-                  Save
-                </Button>
-              </Box>
-            </Box>
-          </Paper>
-        </Modal>
+        <SettingsModal
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          settings={settings}
+          onSave={handleSaveSettings}
+          modelsList={modelsList}
+          setModelsList={setModelsList}
+          setSelectedModel={setSelectedModel}
+        />
 
-        {/* Cloud Waitlist Modal */}
-        <Modal open={waitlistOpen} onClose={() => setWaitlistOpen(false)}>
-          <Paper
-            sx={{
-              ...components.modal,
-              minWidth: 360,
-              maxWidth: 420,
-            }}
-          >
-            <Box sx={{ textAlign: "center" }}>
-              <Box
-                sx={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 48,
-                  height: 48,
-                  borderRadius: "12px",
-                  backgroundColor: colors.bg.tertiary,
-                  border: `1px solid ${colors.border.secondary}`,
-                  mb: 2,
-                }}
-              >
-                <CloudIcon sx={{ color: colors.text.muted, fontSize: 24 }} />
-              </Box>
-              <Typography
-                variant="h6"
-                sx={{
-                  background: `linear-gradient(135deg, ${colors.accent.blue} 0%, #82c4ff 100%)`,
-                  backgroundClip: "text",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  mb: 1,
-                  fontWeight: 600,
-                }}
-              >
-                Cloud Sync
-              </Typography>
-              <Typography
-                variant="body2"
-                sx={{ ...typography.muted, mb: 3, lineHeight: 1.6 }}
-              >
-                Sync your conversations across devices, share branches with
-                collaborators, and never lose your chat history.
-              </Typography>
-
-              {waitlistSubmitted ? (
-                <Box
-                  sx={{
-                    p: 2,
-                    borderRadius: 1.5,
-                    backgroundColor: "rgba(74, 158, 255, 0.08)",
-                    border: "1px solid rgba(74, 158, 255, 0.2)",
-                  }}
-                >
-                  <Typography variant="body2" sx={typography.accent}>
-                    ✓ You&apos;re on the list!
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{ ...typography.dim, display: "block", mt: 0.5 }}
-                  >
-                    We&apos;ll notify you when cloud sync is ready.
-                  </Typography>
-                </Box>
-              ) : (
-                <Box
-                  sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}
-                >
-                  <TextField
-                    placeholder="Enter your email"
-                    value={waitlistEmail}
-                    onChange={(e) => setWaitlistEmail(e.target.value)}
-                    fullWidth
-                    size="small"
-                    autoComplete="email"
-                    type="email"
-                    sx={components.textField}
-                  />
-                  <Button
-                    onClick={handleWaitlistSubmit}
-                    disabled={
-                      !waitlistEmail.trim() || !waitlistEmail.includes("@")
-                    }
-                    fullWidth
-                    sx={components.buttonSecondary}
-                  >
-                    Join Waitlist
-                  </Button>
-                </Box>
-              )}
-
-              <Typography
-                variant="caption"
-                sx={{ ...typography.dim, display: "block", mt: 2 }}
-              >
-                Coming Soon
-              </Typography>
-            </Box>
-          </Paper>
-        </Modal>
+        {/* Waitlist Modal */}
+        <WaitlistModal
+          open={waitlistOpen}
+          onClose={() => setWaitlistOpen(false)}
+        />
       </ReactFlow>
     </Box>
   );
