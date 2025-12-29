@@ -16,6 +16,10 @@ import {
 export const generateChatId = () =>
   `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+// Generate unique group ID
+export const generateGroupId = () =>
+  `group-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
 // Load all chats list from localStorage
 export const loadChatsList = () => {
   if (typeof window === "undefined") return [];

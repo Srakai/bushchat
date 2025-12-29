@@ -1,5 +1,7 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { DndProvider } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
 import {
   Paper,
   Typography,
@@ -8,19 +10,16 @@ import {
   IconButton,
   Collapse,
   List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
   Divider,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SettingsIcon from "@mui/icons-material/Settings";
 import CloudIcon from "@mui/icons-material/Cloud";
 import ShareIcon from "@mui/icons-material/Share";
 import GitHubIcon from "@mui/icons-material/GitHub";
+import DraggableChatItem from "./DraggableChatItem";
 import { colors, components, typography } from "../styles/theme";
 
 const InfoPanel = ({
@@ -32,11 +31,66 @@ const InfoPanel = ({
   onOpenSettings,
   onOpenWaitlist,
   onShareChat,
+  onMoveChat,
+  onMergeChats,
   mergeMode,
   onCancelMerge,
   conversationHistoryLength,
 }) => {
   const [chatsExpanded, setChatsExpanded] = useState(false);
+
+  // Organize chats into groups and ungrouped items
+  // Groups are displayed with their members indented
+  const organizedChats = useMemo(() => {
+    const groups = {};
+    const ungrouped = [];
+    
+    chatsList.forEach((chat) => {
+      if (chat.groupId) {
+        if (!groups[chat.groupId]) {
+          groups[chat.groupId] = [];
+        }
+        groups[chat.groupId].push(chat);
+      } else {
+        ungrouped.push(chat);
+      }
+    });
+
+    // Sort each group by order
+    Object.values(groups).forEach((group) => {
+      group.sort((a, b) => (a.order || 0) - (b.order || 0));
+    });
+
+    // Sort ungrouped by order
+    ungrouped.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    // Build final list - groups first, then ungrouped
+    const result = [];
+    let flatIndex = 0;
+
+    // Add group items
+    Object.entries(groups).forEach(([groupId, members]) => {
+      members.forEach((chat) => {
+        result.push({
+          ...chat,
+          isGrouped: true,
+          groupId,
+          flatIndex: flatIndex++,
+        });
+      });
+    });
+
+    // Add ungrouped items
+    ungrouped.forEach((chat) => {
+      result.push({
+        ...chat,
+        isGrouped: false,
+        flatIndex: flatIndex++,
+      });
+    });
+
+    return result;
+  }, [chatsList]);
 
   return (
     <Paper
@@ -143,53 +197,24 @@ const InfoPanel = ({
           </Box>
         </Box>
         <Collapse in={chatsExpanded}>
-          <List dense sx={{ py: 0.5, maxHeight: 200, overflow: "auto" }}>
-            {chatsList.map((chat) => (
-              <ListItem
-                key={chat.id}
-                disablePadding
-                secondaryAction={
-                  chatsList.length > 1 && (
-                    <IconButton
-                      edge="end"
-                      size="small"
-                      onClick={(e) => onDeleteChat(chat.id, e)}
-                      sx={{
-                        color: colors.text.dim,
-                        "&:hover": { color: colors.accent.delete },
-                        p: 0.5,
-                      }}
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  )
-                }
-              >
-                <ListItemButton
-                  selected={chat.id === activeChatId}
-                  onClick={() => onSwitchChat(chat.id)}
-                  sx={components.listItemButton}
-                >
-                  <ListItemText
-                    primary={chat.name}
-                    className="ph-no-capture"
-                    primaryTypographyProps={{
-                      variant: "caption",
-                      sx: {
-                        color:
-                          chat.id === activeChatId
-                            ? colors.text.primary
-                            : colors.text.secondary,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      },
-                    }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
+          <DndProvider backend={HTML5Backend}>
+            <List dense sx={{ py: 0.5, maxHeight: 200, overflow: "auto" }}>
+              {organizedChats.map((chat) => (
+                <DraggableChatItem
+                  key={chat.id}
+                  chat={chat}
+                  index={chat.flatIndex}
+                  isActive={chat.id === activeChatId}
+                  isGrouped={chat.isGrouped}
+                  canDelete={chatsList.length > 1}
+                  onSwitchChat={onSwitchChat}
+                  onDeleteChat={onDeleteChat}
+                  onMoveChat={onMoveChat}
+                  onMergeChats={onMergeChats}
+                />
+              ))}
+            </List>
+          </DndProvider>
         </Collapse>
       </Box>
 
