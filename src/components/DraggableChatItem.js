@@ -17,10 +17,10 @@ const MERGE_HOVER_DELAY = 1500; // 1.5 seconds
 
 /**
  * DraggableChatItem component for drag-and-drop reordering and merging of chats.
- * 
+ *
  * Each item is divided into zones:
- * - For ungrouped items: 30% (reorder) | 40% (merge) | 30% (reorder)
- * - For grouped items: 50% (reorder) | 50% (reorder) - no merge zone
+ * - For ungrouped items: 30% (reorder) / 40% (merge) / 30% (reorder)
+ * - For grouped items: 50% (reorder) / 50% (reorder) - no merge zone
  */
 const DraggableChatItem = ({
   chat,
@@ -63,23 +63,23 @@ const DraggableChatItem = ({
       if (!clientOffset) return;
 
       const hoverBoundingRect = itemRef.current.getBoundingClientRect();
-      const hoverWidth = hoverBoundingRect.right - hoverBoundingRect.left;
-      const hoverClientX = clientOffset.x - hoverBoundingRect.left;
-      const relativeX = hoverClientX / hoverWidth;
+      const hoverHeight = hoverBoundingRect.bottom - hoverBoundingRect.top;
+      const hoverClientY = clientOffset.y - hoverBoundingRect.top;
+      const relativeY = hoverHeight > 0 ? hoverClientY / hoverHeight : 0;
 
       // Determine which zone we're in
       let zone;
       if (isGrouped) {
-        // 50% | 50% - no merge zone for grouped items
-        zone = relativeX < 0.5 ? "reorder-left" : "reorder-right";
+        // 50% / 50% - no merge zone for grouped items
+        zone = relativeY < 0.5 ? "reorder-top" : "reorder-bottom";
       } else {
-        // 30% | 40% | 30%
-        if (relativeX < 0.3) {
-          zone = "reorder-left";
-        } else if (relativeX < 0.7) {
+        // 30% / 40% / 30%
+        if (relativeY < 0.3) {
+          zone = "reorder-top";
+        } else if (relativeY < 0.7) {
           zone = "merge";
         } else {
-          zone = "reorder-right";
+          zone = "reorder-bottom";
         }
       }
 
@@ -115,12 +115,12 @@ const DraggableChatItem = ({
       if (!clientOffset) return;
 
       const hoverBoundingRect = itemRef.current.getBoundingClientRect();
-      const hoverWidth = hoverBoundingRect.right - hoverBoundingRect.left;
-      const hoverClientX = clientOffset.x - hoverBoundingRect.left;
-      const relativeX = hoverClientX / hoverWidth;
+      const hoverHeight = hoverBoundingRect.bottom - hoverBoundingRect.top;
+      const hoverClientY = clientOffset.y - hoverBoundingRect.top;
+      const relativeY = hoverHeight > 0 ? hoverClientY / hoverHeight : 0;
 
       // Determine drop position
-      const insertBefore = relativeX < 0.5;
+      const insertBefore = relativeY < 0.5;
       const dragIndex = item.index;
       const hoverIndex = index;
 
@@ -238,25 +238,38 @@ const DraggableChatItem = ({
             bottom: 0,
             pointerEvents: "none",
             display: "flex",
+            flexDirection: "column",
           }}
         >
           <Box
             sx={{
-              width: "30%",
-              borderRight: currentZone === "reorder-left" ? `2px solid ${colors.accent.blue}` : "none",
+              height: "30%",
+              borderBottom:
+                currentZone === "reorder-top"
+                  ? `2px solid ${colors.accent.blue}`
+                  : "none",
             }}
           />
           <Box
             sx={{
-              width: "40%",
-              borderLeft: currentZone === "merge" ? `1px dashed ${colors.accent.orange}` : "none",
-              borderRight: currentZone === "merge" ? `1px dashed ${colors.accent.orange}` : "none",
+              height: "40%",
+              borderTop:
+                currentZone === "merge"
+                  ? `1px dashed ${colors.accent.orange}`
+                  : "none",
+              borderBottom:
+                currentZone === "merge"
+                  ? `1px dashed ${colors.accent.orange}`
+                  : "none",
             }}
           />
           <Box
             sx={{
-              width: "30%",
-              borderLeft: currentZone === "reorder-right" ? `2px solid ${colors.accent.blue}` : "none",
+              height: "30%",
+              borderTop:
+                currentZone === "reorder-bottom"
+                  ? `2px solid ${colors.accent.blue}`
+                  : "none",
             }}
           />
         </Box>

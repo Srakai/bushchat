@@ -25,8 +25,11 @@ import { colors, components, typography } from "../styles/theme";
 const InfoPanel = ({
   chatsList,
   activeChatId,
+  focusedChatId,
+  activeGroupId,
   onCreateNewChat,
   onSwitchChat,
+  onFocusChatInGroup,
   onDeleteChat,
   onOpenSettings,
   onOpenWaitlist,
@@ -44,7 +47,7 @@ const InfoPanel = ({
   const organizedChats = useMemo(() => {
     const groups = {};
     const ungrouped = [];
-    
+
     chatsList.forEach((chat) => {
       if (chat.groupId) {
         if (!groups[chat.groupId]) {
@@ -91,6 +94,14 @@ const InfoPanel = ({
 
     return result;
   }, [chatsList]);
+
+  const handleSelectChat = (chat) => {
+    if (activeGroupId && chat.groupId === activeGroupId && onFocusChatInGroup) {
+      onFocusChatInGroup(chat.id);
+      return;
+    }
+    onSwitchChat(chat.id);
+  };
 
   return (
     <Paper
@@ -204,10 +215,14 @@ const InfoPanel = ({
                   key={chat.id}
                   chat={chat}
                   index={chat.flatIndex}
-                  isActive={chat.id === activeChatId}
+                  isActive={
+                    activeGroupId && chat.groupId === activeGroupId
+                      ? chat.id === focusedChatId
+                      : chat.id === activeChatId
+                  }
                   isGrouped={chat.isGrouped}
                   canDelete={chatsList.length > 1}
-                  onSwitchChat={onSwitchChat}
+                  onSwitchChat={() => handleSelectChat(chat)}
                   onDeleteChat={onDeleteChat}
                   onMoveChat={onMoveChat}
                   onMergeChats={onMergeChats}

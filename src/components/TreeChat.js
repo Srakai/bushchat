@@ -98,11 +98,11 @@ const TreeChatInner = () => {
   const activeGroupInfo = useMemo(() => {
     const activeChat = chatsList.find((c) => c.id === activeChatId);
     if (!activeChat?.groupId) return null;
-    
+
     const groupMembers = chatsList
       .filter((c) => c.groupId === activeChat.groupId)
       .sort((a, b) => (a.order || 0) - (b.order || 0));
-    
+
     return {
       groupId: activeChat.groupId,
       members: groupMembers,
@@ -116,7 +116,7 @@ const TreeChatInner = () => {
   // Load all grouped states when in a group
   const groupedStates = useMemo(() => {
     if (!activeGroupInfo) return null;
-    
+
     const states = {};
     activeGroupInfo.members.forEach((member, index) => {
       const state = loadChatState(member.id);
@@ -135,38 +135,40 @@ const TreeChatInner = () => {
   // Combine all group trees into a single node/edge array with prefixed IDs
   const combinedGroupState = useMemo(() => {
     if (!groupedStates) return null;
-    
+
     const allNodes = [];
     const allEdges = [];
-    
-    Object.values(groupedStates).forEach(({ chatId, nodes: treeNodes, edges: treeEdges, offset }) => {
-      // Add prefixed and offset nodes
-      treeNodes.forEach((node) => {
-        allNodes.push({
-          ...node,
-          id: `${chatId}:${node.id}`,
-          position: {
-            x: node.position.x + offset.x,
-            y: node.position.y + offset.y,
-          },
-          data: {
-            ...node.data,
-            chatId, // Track which chat this node belongs to
-          },
+
+    Object.values(groupedStates).forEach(
+      ({ chatId, nodes: treeNodes, edges: treeEdges, offset }) => {
+        // Add prefixed and offset nodes
+        treeNodes.forEach((node) => {
+          allNodes.push({
+            ...node,
+            id: `${chatId}:${node.id}`,
+            position: {
+              x: node.position.x + offset.x,
+              y: node.position.y + offset.y,
+            },
+            data: {
+              ...node.data,
+              chatId, // Track which chat this node belongs to
+            },
+          });
         });
-      });
-      
-      // Add prefixed edges
-      treeEdges.forEach((edge) => {
-        allEdges.push({
-          ...edge,
-          id: `${chatId}:${edge.id}`,
-          source: `${chatId}:${edge.source}`,
-          target: `${chatId}:${edge.target}`,
+
+        // Add prefixed edges
+        treeEdges.forEach((edge) => {
+          allEdges.push({
+            ...edge,
+            id: `${chatId}:${edge.id}`,
+            source: `${chatId}:${edge.source}`,
+            target: `${chatId}:${edge.target}`,
+          });
         });
-      });
-    });
-    
+      }
+    );
+
     return { nodes: allNodes, edges: allEdges };
   }, [groupedStates]);
 
@@ -176,12 +178,12 @@ const TreeChatInner = () => {
   const [edges, setEdges, onEdgesChange] = useEdgesState(
     combinedGroupState?.edges || savedState?.edges || initialEdges
   );
-  
+
   // Track the focused chat ID within a group (which tree receives input)
   const [focusedChatId, setFocusedChatId] = useState(activeChatId);
-  
+
   const [selectedNodeId, setSelectedNodeId] = useState(
-    activeGroupInfo 
+    activeGroupInfo
       ? `${activeChatId}:${savedState?.selectedNodeId || "root"}`
       : savedState?.selectedNodeId || "root"
   );
@@ -191,7 +193,7 @@ const TreeChatInner = () => {
   const [mergeMode, setMergeMode] = useState(null);
   const [pendingMerge, setPendingMerge] = useState(null);
   const nodeIdCounter = useRef(savedState?.nodeIdCounter || 1);
-  const { fitView } = useReactFlow();
+  const { fitView, getNodes } = useReactFlow();
 
   // Chat API hook
   const { sendChatRequest } = useChatApi(settings);
@@ -204,28 +206,35 @@ const TreeChatInner = () => {
         // For grouped chats, split the combined state back to individual chats
         activeGroupInfo.members.forEach((member) => {
           const chatPrefix = `${member.id}:`;
-          
+
           // Extract nodes for this chat (remove prefix and offset)
-          const chatNodes = nodes
-            .filter((n) => n.id.startsWith(chatPrefix))
-            .map((n) => {
-              const originalId = n.id.replace(chatPrefix, "");
-              const state = groupedStates?.[member.id];
-              const offset = state?.offset || { x: 0, y: 0 };
-              return {
-                ...n,
-                id: originalId,
-                position: {
-                  x: n.position.x - offset.x,
-                  y: n.position.y - offset.y,
-                },
-                data: {
-                  ...n.data,
-                  chatId: undefined, // Remove chatId marker
-                },
-              };
-            });
-          
+          // Guardrail: only save grouped state if we actually have prefixed nodes.
+          // Otherwise we'd overwrite existing chats with the empty/initial template.
+          const prefixedNodes = nodes.filter((n) =>
+            n.id.startsWith(chatPrefix)
+          );
+          if (prefixedNodes.length === 0) {
+            return;
+          }
+
+          const chatNodes = prefixedNodes.map((n) => {
+            const originalId = n.id.replace(chatPrefix, "");
+            const state = groupedStates?.[member.id];
+            const offset = state?.offset || { x: 0, y: 0 };
+            return {
+              ...n,
+              id: originalId,
+              position: {
+                x: n.position.x - offset.x,
+                y: n.position.y - offset.y,
+              },
+              data: {
+                ...n.data,
+                chatId: undefined, // Remove chatId marker
+              },
+            };
+          });
+
           // Extract edges for this chat (remove prefix)
           const chatEdges = edges
             .filter((e) => e.id.startsWith(chatPrefix))
@@ -235,12 +244,12 @@ const TreeChatInner = () => {
               source: e.source.replace(chatPrefix, ""),
               target: e.target.replace(chatPrefix, ""),
             }));
-          
+
           // Get selected node for this chat
           const selectedForChat = selectedNodeId.startsWith(chatPrefix)
             ? selectedNodeId.replace(chatPrefix, "")
             : "root";
-          
+
           saveChatState(
             member.id,
             chatNodes.length > 0 ? chatNodes : initialNodes,
@@ -262,7 +271,15 @@ const TreeChatInner = () => {
       setChatsList(loadChatsList()); // Refresh list to get updated names
     }, 500); // Debounce saves
     return () => clearTimeout(timeoutId);
-  }, [nodes, edges, selectedNodeId, activeChatId, isSharedView, activeGroupInfo, groupedStates]);
+  }, [
+    nodes,
+    edges,
+    selectedNodeId,
+    activeChatId,
+    isSharedView,
+    activeGroupInfo,
+    groupedStates,
+  ]);
 
   // Load shared chat from URL hash on mount
   const sharedChatLoadedRef = useRef(false);
@@ -324,25 +341,25 @@ const TreeChatInner = () => {
       setActiveChatIdState(chatId);
       setFocusedChatId(chatId);
       setIsSharedView(false); // Clear shared view when switching to saved chat
-      
+
       // Check if this chat is part of a group
       const targetChat = chatsList.find((c) => c.id === chatId);
       const isGrouped = targetChat?.groupId;
-      
+
       if (isGrouped) {
         // Load all chats in the group
         const groupMembers = chatsList
           .filter((c) => c.groupId === targetChat.groupId)
           .sort((a, b) => (a.order || 0) - (b.order || 0));
-        
+
         const allNodes = [];
         const allEdges = [];
         let maxNodeIdCounter = 1;
-        
+
         groupMembers.forEach((member, index) => {
           const state = loadChatState(member.id);
           const offset = { x: index * TREE_HORIZONTAL_OFFSET, y: 0 };
-          
+
           // Add prefixed and offset nodes
           const memberNodes = state?.nodes || initialNodes;
           memberNodes.forEach((node) => {
@@ -359,7 +376,7 @@ const TreeChatInner = () => {
               },
             });
           });
-          
+
           // Add prefixed edges
           const memberEdges = state?.edges || initialEdges;
           memberEdges.forEach((edge) => {
@@ -370,15 +387,15 @@ const TreeChatInner = () => {
               target: `${member.id}:${edge.target}`,
             });
           });
-          
+
           if (state?.nodeIdCounter > maxNodeIdCounter) {
             maxNodeIdCounter = state.nodeIdCounter;
           }
         });
-        
+
         setNodes(allNodes);
         setEdges(allEdges);
-        
+
         // Set selected node to the root of the clicked chat
         const chatState = loadChatState(chatId);
         setSelectedNodeId(`${chatId}:${chatState?.selectedNodeId || "root"}`);
@@ -398,11 +415,48 @@ const TreeChatInner = () => {
           nodeIdCounter.current = 1;
         }
       }
-      
+
       setMergeMode(null);
       setTimeout(() => fitView({ padding: 0.2 }), 100);
     },
     [setNodes, setEdges, fitView, chatsList]
+  );
+
+  // In grouped view, selecting a member from the list should focus that tree
+  // without reloading/switching chats (prevents losing unsaved in-memory edits).
+  const focusChatInGroup = useCallback(
+    (chatId) => {
+      const activeChat = chatsList.find((c) => c.id === activeChatId);
+      const targetChat = chatsList.find((c) => c.id === chatId);
+
+      if (!activeChat?.groupId || !targetChat?.groupId) {
+        switchToChat(chatId);
+        return;
+      }
+
+      if (activeChat.groupId !== targetChat.groupId) {
+        switchToChat(chatId);
+        return;
+      }
+
+      setFocusedChatId(chatId);
+      const chatState = loadChatState(chatId);
+      setSelectedNodeId(`${chatId}:${chatState?.selectedNodeId || "root"}`);
+
+      // Fit view to nodes belonging to this chat's tree.
+      setTimeout(() => {
+        const prefix = `${chatId}:`;
+        const nodesToFit = (getNodes() || []).filter(
+          (n) => typeof n.id === "string" && n.id.startsWith(prefix)
+        );
+        if (nodesToFit.length > 0) {
+          fitView({ padding: 0.2, duration: 300, nodes: nodesToFit });
+        } else {
+          fitView({ padding: 0.2, duration: 300 });
+        }
+      }, 50);
+    },
+    [activeChatId, chatsList, fitView, getNodes, switchToChat]
   );
 
   // Create a new chat
@@ -445,16 +499,16 @@ const TreeChatInner = () => {
   const moveChat = useCallback(
     (draggedChatId, targetChatId, insertBefore) => {
       const updatedList = [...chatsList];
-      
+
       // Find the dragged and target chats
       const draggedIndex = updatedList.findIndex((c) => c.id === draggedChatId);
       const targetIndex = updatedList.findIndex((c) => c.id === targetChatId);
-      
+
       if (draggedIndex === -1 || targetIndex === -1) return;
-      
+
       const draggedChat = updatedList[draggedIndex];
       const targetChat = updatedList[targetIndex];
-      
+
       // If dragged chat is in a group, keep it in that group
       // If target chat is in a different group, move dragged to that group
       if (targetChat.groupId && draggedChat.groupId !== targetChat.groupId) {
@@ -475,22 +529,24 @@ const TreeChatInner = () => {
         }
         draggedChat.groupId = null;
       }
-      
+
       // Remove dragged chat from list
       updatedList.splice(draggedIndex, 1);
-      
+
       // Find new target index (it may have shifted)
-      const newTargetIndex = updatedList.findIndex((c) => c.id === targetChatId);
-      
+      const newTargetIndex = updatedList.findIndex(
+        (c) => c.id === targetChatId
+      );
+
       // Insert at the right position
       const insertIndex = insertBefore ? newTargetIndex : newTargetIndex + 1;
       updatedList.splice(insertIndex, 0, draggedChat);
-      
+
       // Update order values for all items
       updatedList.forEach((chat, index) => {
         chat.order = index;
       });
-      
+
       saveChatsList(updatedList);
       setChatsList(updatedList);
     },
@@ -501,13 +557,13 @@ const TreeChatInner = () => {
   const mergeChats = useCallback(
     (draggedChatId, targetChatId) => {
       if (draggedChatId === targetChatId) return;
-      
+
       const updatedList = [...chatsList];
       const draggedChat = updatedList.find((c) => c.id === draggedChatId);
       const targetChat = updatedList.find((c) => c.id === targetChatId);
-      
+
       if (!draggedChat || !targetChat) return;
-      
+
       // Prevent nesting - if either chat is already in a group, we can't create new groups
       // This ensures flat group structure (no nested groups)
       if (draggedChat.groupId || targetChat.groupId) {
@@ -518,21 +574,76 @@ const TreeChatInner = () => {
         });
         return;
       }
-      
+
       // Create a new group
       const newGroupId = generateGroupId();
-      
+
       // Add both chats to the group
       draggedChat.groupId = newGroupId;
       targetChat.groupId = newGroupId;
-      
-      // Set order within the group
-      targetChat.order = 0;
-      draggedChat.order = 1;
-      
+
       saveChatsList(updatedList);
       setChatsList(updatedList);
-      
+
+      // If the active chat is now grouped, immediately switch the canvas into grouped mode.
+      // This prevents the debounced grouped autosave from treating unprefixed nodes as "empty"
+      // and overwriting existing chat history with the initial template.
+      if (activeChatId === draggedChatId || activeChatId === targetChatId) {
+        const groupMembers = updatedList
+          .filter((c) => c.groupId === newGroupId)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        const allNodes = [];
+        const allEdges = [];
+        let maxNodeIdCounter = 1;
+
+        groupMembers.forEach((member, index) => {
+          const state = loadChatState(member.id);
+          const offset = { x: index * TREE_HORIZONTAL_OFFSET, y: 0 };
+
+          const memberNodes = state?.nodes || initialNodes;
+          memberNodes.forEach((node) => {
+            allNodes.push({
+              ...node,
+              id: `${member.id}:${node.id}`,
+              position: {
+                x: node.position.x + offset.x,
+                y: node.position.y + offset.y,
+              },
+              data: {
+                ...node.data,
+                chatId: member.id,
+              },
+            });
+          });
+
+          const memberEdges = state?.edges || initialEdges;
+          memberEdges.forEach((edge) => {
+            allEdges.push({
+              ...edge,
+              id: `${member.id}:${edge.id}`,
+              source: `${member.id}:${edge.source}`,
+              target: `${member.id}:${edge.target}`,
+            });
+          });
+
+          if ((state?.nodeIdCounter || 1) > maxNodeIdCounter) {
+            maxNodeIdCounter = state.nodeIdCounter;
+          }
+        });
+
+        setNodes(allNodes);
+        setEdges(allEdges);
+
+        const activeState = loadChatState(activeChatId);
+        setSelectedNodeId(
+          `${activeChatId}:${activeState?.selectedNodeId || "root"}`
+        );
+        setFocusedChatId(activeChatId);
+        nodeIdCounter.current = maxNodeIdCounter;
+        setTimeout(() => fitView({ padding: 0.2 }), 100);
+      }
+
       // Show confirmation
       setSnackbar({
         open: true,
@@ -540,7 +651,7 @@ const TreeChatInner = () => {
         severity: "success",
       });
     },
-    [chatsList]
+    [chatsList, activeChatId, fitView, setEdges, setNodes]
   );
 
   // Save settings handler
@@ -680,8 +791,9 @@ const TreeChatInner = () => {
 
       // Check if we're in grouped mode by looking for a prefix
       const colonIndex = parentNodeId.indexOf(":");
-      const chatPrefix = colonIndex !== -1 ? parentNodeId.substring(0, colonIndex + 1) : "";
-      
+      const chatPrefix =
+        colonIndex !== -1 ? parentNodeId.substring(0, colonIndex + 1) : "";
+
       const newNodeId = `${chatPrefix}node-${nodeIdCounter.current++}`;
 
       // Get parent node position
@@ -714,7 +826,10 @@ const TreeChatInner = () => {
       setEdges((eds) => [
         ...eds,
         {
-          id: `${chatPrefix}edge-${parentNodeId.replace(chatPrefix, "")}-${newNodeId.replace(chatPrefix, "")}`,
+          id: `${chatPrefix}edge-${parentNodeId.replace(
+            chatPrefix,
+            ""
+          )}-${newNodeId.replace(chatPrefix, "")}`,
           source: parentNodeId,
           target: newNodeId,
           type: "smoothstep",
@@ -953,10 +1068,11 @@ const TreeChatInner = () => {
       const nodesToRemove = new Set([nodeId, ...descendants]);
 
       const parentEdge = edges.find((e) => e.target === nodeId);
-      
+
       // Handle prefixed parent ID for grouped mode
       const colonIndex = nodeId.indexOf(":");
-      const chatPrefix = colonIndex !== -1 ? nodeId.substring(0, colonIndex + 1) : "";
+      const chatPrefix =
+        colonIndex !== -1 ? nodeId.substring(0, colonIndex + 1) : "";
       const parentId = parentEdge?.source || `${chatPrefix}root`;
 
       setNodes((nds) => nds.filter((n) => !nodesToRemove.has(n.id)));
@@ -1369,7 +1485,7 @@ const TreeChatInner = () => {
   // Handle node selection
   const onNodeClick = useCallback((_, node) => {
     setSelectedNodeId(node.id);
-    
+
     // If in a grouped view, update the focused chat based on which tree was clicked
     if (node.data?.chatId) {
       setFocusedChatId(node.data.chatId);
@@ -1432,8 +1548,11 @@ const TreeChatInner = () => {
           <InfoPanel
             chatsList={chatsList}
             activeChatId={activeChatId}
+            focusedChatId={focusedChatId}
+            activeGroupId={activeGroupInfo?.groupId || null}
             onCreateNewChat={createNewChat}
             onSwitchChat={switchToChat}
+            onFocusChatInGroup={focusChatInGroup}
             onDeleteChat={deleteChat}
             onMoveChat={moveChat}
             onMergeChats={mergeChats}
