@@ -126,6 +126,10 @@ html {
   color: var(--text-muted) !important;
 }
 
+.react-flow__controls button svg {
+  fill: var(--text-secondary) !important;
+}
+
 .react-flow__controls button:hover {
   background-color: var(--bg-tertiary) !important;
 }

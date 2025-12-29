@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import ReactFlow, {
   Controls,
+  ControlButton,
   Background,
   useNodesState,
   useEdgesState,
@@ -15,6 +16,8 @@ import ReactFlow, {
   useReactFlow,
   Panel,
 } from "reactflow";
+import SwapVertIcon from "@mui/icons-material/SwapVert";
+import PanToolIcon from "@mui/icons-material/PanTool";
 import "reactflow/dist/style.css";
 import { Box, Snackbar, Alert } from "@mui/material";
 
@@ -80,6 +83,9 @@ const TreeChatInner = () => {
     message: "",
     severity: "success",
   });
+
+  // Pan on scroll state (true = scroll to pan, false = scroll to zoom)
+  const [panOnScroll, setPanOnScroll] = useState(true);
 
   // Merge state
   const [mergeMode, setMergeMode] = useState(null);
@@ -475,7 +481,7 @@ const TreeChatInner = () => {
         proOptions={{ hideAttribution: true }}
         deleteKeyCode={null}
         selectionKeyCode={null}
-        panOnScroll={true}
+        panOnScroll={panOnScroll}
       >
         <Background color="#888888" gap={20} />
         <Controls
@@ -484,7 +490,23 @@ const TreeChatInner = () => {
             borderRadius: 8,
             border: `1px solid ${colors.border.primary}`,
           }}
-        />
+          className="custom-controls"
+        >
+          <ControlButton
+            onClick={() => setPanOnScroll((prev) => !prev)}
+            title={
+              panOnScroll
+                ? "Scroll to pan (click to switch to zoom)"
+                : "Scroll to zoom (click to switch to pan)"
+            }
+          >
+            {panOnScroll ? (
+              <PanToolIcon sx={{ fontSize: 16, color: colors.text.primary }} />
+            ) : (
+              <SwapVertIcon sx={{ fontSize: 16, color: colors.text.primary }} />
+            )}
+          </ControlButton>
+        </Controls>
 
         {/* Input Panel */}
         <Panel position="bottom-center">
