@@ -35,7 +35,7 @@ export async function POST(request) {
       body: JSON.stringify({
         model: model,
         messages: messages,
-        max_tokens: 4000,
+        max_completion_tokens: 4000,
         stream: supportsStreaming,
       }),
     });
