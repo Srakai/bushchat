@@ -64,6 +64,15 @@ const InfoPanel = ({
       group.sort((a, b) => (a.order || 0) - (b.order || 0));
     });
 
+    // If a "group" has only 1 member, treat it as ungrouped in the UI.
+    // (This can happen after deleting a chat from a group.)
+    Object.entries(groups).forEach(([groupId, members]) => {
+      if (members.length < 2) {
+        members.forEach((chat) => ungrouped.push(chat));
+        delete groups[groupId];
+      }
+    });
+
     // Sort ungrouped by order
     ungrouped.sort((a, b) => (a.order || 0) - (b.order || 0));
 
@@ -72,20 +81,33 @@ const InfoPanel = ({
     let flatIndex = 0;
 
     // Add group items
-    Object.entries(groups).forEach(([groupId, members]) => {
+    const groupEntries = Object.entries(groups);
+    groupEntries.forEach(([groupId, members], groupIndex) => {
       members.forEach((chat) => {
         result.push({
+          kind: "chat",
           ...chat,
           isGrouped: true,
           groupId,
           flatIndex: flatIndex++,
         });
       });
+
+      // Minimal dashed separator between groups, and between grouped + ungrouped.
+      const hasMoreGroups = groupIndex < groupEntries.length - 1;
+      const hasUngrouped = ungrouped.length > 0;
+      if (hasMoreGroups || hasUngrouped) {
+        result.push({
+          kind: "separator",
+          id: hasMoreGroups ? `sep-after-${groupId}` : "sep-grouped-ungrouped",
+        });
+      }
     });
 
     // Add ungrouped items
     ungrouped.forEach((chat) => {
       result.push({
+        kind: "chat",
         ...chat,
         isGrouped: false,
         flatIndex: flatIndex++,
@@ -210,24 +232,42 @@ const InfoPanel = ({
         <Collapse in={chatsExpanded}>
           <DndProvider backend={HTML5Backend}>
             <List dense sx={{ py: 0.5, maxHeight: 200, overflow: "auto" }}>
-              {organizedChats.map((chat) => (
-                <DraggableChatItem
-                  key={chat.id}
-                  chat={chat}
-                  index={chat.flatIndex}
-                  isActive={
-                    activeGroupId && chat.groupId === activeGroupId
-                      ? chat.id === focusedChatId
-                      : chat.id === activeChatId
-                  }
-                  isGrouped={chat.isGrouped}
-                  canDelete={chatsList.length > 1}
-                  onSwitchChat={() => handleSelectChat(chat)}
-                  onDeleteChat={onDeleteChat}
-                  onMoveChat={onMoveChat}
-                  onMergeChats={onMergeChats}
-                />
-              ))}
+              {organizedChats.map((item) => {
+                if (item.kind === "separator") {
+                  return (
+                    <Divider
+                      key={item.id}
+                      component="li"
+                      sx={{
+                        borderColor: colors.border.primary,
+                        borderStyle: "dashed",
+                        opacity: 0.35,
+                        my: 0.5,
+                        mx: 1,
+                      }}
+                    />
+                  );
+                }
+
+                return (
+                  <DraggableChatItem
+                    key={item.id}
+                    chat={item}
+                    index={item.flatIndex}
+                    isActive={
+                      activeGroupId && item.groupId === activeGroupId
+                        ? item.id === focusedChatId
+                        : item.id === activeChatId
+                    }
+                    isGrouped={item.isGrouped}
+                    canDelete={chatsList.length > 1}
+                    onSwitchChat={() => handleSelectChat(item)}
+                    onDeleteChat={onDeleteChat}
+                    onMoveChat={onMoveChat}
+                    onMergeChats={onMergeChats}
+                  />
+                );
+              })}
             </List>
           </DndProvider>
         </Collapse>

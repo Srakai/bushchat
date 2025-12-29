@@ -103,12 +103,39 @@ const TreeChatInner = () => {
       .filter((c) => c.groupId === activeChat.groupId)
       .sort((a, b) => (a.order || 0) - (b.order || 0));
 
+    // A group with <2 members is not a group.
+    if (groupMembers.length < 2) return null;
+
     return {
       groupId: activeChat.groupId,
       members: groupMembers,
       focusedChatId: activeChatId,
     };
   }, [chatsList, activeChatId]);
+
+  // Normalize orphaned groups (size < 2) back to ungrouped.
+  // This can happen after deleting a chat from a group.
+  useEffect(() => {
+    const counts = {};
+    chatsList.forEach((chat) => {
+      if (!chat.groupId) return;
+      counts[chat.groupId] = (counts[chat.groupId] || 0) + 1;
+    });
+
+    const orphanGroupIds = Object.entries(counts)
+      .filter(([, count]) => count < 2)
+      .map(([groupId]) => groupId);
+
+    if (orphanGroupIds.length === 0) return;
+
+    const orphanSet = new Set(orphanGroupIds);
+    const normalized = chatsList.map((chat) =>
+      orphanSet.has(chat.groupId) ? { ...chat, groupId: null } : chat
+    );
+
+    saveChatsList(normalized);
+    setChatsList(normalized);
+  }, [chatsList]);
 
   // Load initial state from localStorage or use defaults
   const savedState = useMemo(() => loadChatState(activeChatId), [activeChatId]);
@@ -352,6 +379,33 @@ const TreeChatInner = () => {
           .filter((c) => c.groupId === targetChat.groupId)
           .sort((a, b) => (a.order || 0) - (b.order || 0));
 
+        // If the group has only one member, dissolve it.
+        if (groupMembers.length < 2) {
+          const updatedList = chatsList.map((c) =>
+            c.groupId === targetChat.groupId ? { ...c, groupId: null } : c
+          );
+          saveChatsList(updatedList);
+          setChatsList(updatedList);
+
+          // Continue as a single chat
+          const chatState = loadChatState(chatId);
+          if (chatState) {
+            setNodes(chatState.nodes || initialNodes);
+            setEdges(chatState.edges || initialEdges);
+            setSelectedNodeId(chatState.selectedNodeId || "root");
+            nodeIdCounter.current = chatState.nodeIdCounter || 1;
+          } else {
+            setNodes(initialNodes);
+            setEdges(initialEdges);
+            setSelectedNodeId("root");
+            nodeIdCounter.current = 1;
+          }
+
+          setMergeMode(null);
+          setTimeout(() => fitView({ padding: 0.2 }), 100);
+          return;
+        }
+
         const allNodes = [];
         const allEdges = [];
         let maxNodeIdCounter = 1;
@@ -480,7 +534,23 @@ const TreeChatInner = () => {
       e.stopPropagation();
       if (chatsList.length <= 1) return; // Don't delete last chat
 
-      const updatedList = chatsList.filter((c) => c.id !== chatId);
+      const deletedChat = chatsList.find((c) => c.id === chatId);
+      const deletedGroupId = deletedChat?.groupId;
+
+      let updatedList = chatsList.filter((c) => c.id !== chatId);
+
+      // If deletion leaves a group with <2 members, dissolve it.
+      if (deletedGroupId) {
+        const remaining = updatedList.filter(
+          (c) => c.groupId === deletedGroupId
+        );
+        if (remaining.length < 2) {
+          updatedList = updatedList.map((c) =>
+            c.groupId === deletedGroupId ? { ...c, groupId: null } : c
+          );
+        }
+      }
+
       saveChatsList(updatedList);
       setChatsList(updatedList);
 
