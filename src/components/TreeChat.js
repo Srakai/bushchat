@@ -1577,6 +1577,8 @@ const TreeChatInner = () => {
   const scrollAccumulatorRef = useRef(0);
   const scrollDirectionRef = useRef(null); // 'up' or 'down'
   const scrollTimeoutRef = useRef(null);
+  const navigationCooldownRef = useRef(false); // Prevent momentum scroll from triggering multiple navigations
+  const lastIndicatorRef = useRef({ force: 0, direction: null }); // Track last indicator to avoid unnecessary updates
   const [scrollForceIndicator, setScrollForceIndicator] = useState({
     force: 0,
     direction: null,
@@ -1629,6 +1631,18 @@ const TreeChatInner = () => {
     (direction) => {
       if (!focusModeNodeId) return;
 
+      // Reset scroll force indicator on any navigation
+      scrollAccumulatorRef.current = 0;
+      scrollDirectionRef.current = null;
+      lastIndicatorRef.current = { force: 0, direction: null };
+      setScrollForceIndicator({ force: 0, direction: null });
+
+      // Set cooldown to ignore momentum scroll events
+      navigationCooldownRef.current = true;
+      setTimeout(() => {
+        navigationCooldownRef.current = false;
+      }, 500); // 500ms cooldown after navigation
+
       if (
         direction === "up" &&
         focusModeNavigation.parent &&
@@ -1654,9 +1668,27 @@ const TreeChatInner = () => {
     (e) => {
       if (!focusModeScrollRef.current) return;
 
+      // Ignore scroll events during cooldown (prevents momentum from triggering multiple navigations)
+      if (navigationCooldownRef.current) {
+        e.preventDefault();
+        return;
+      }
+
       const el = focusModeScrollRef.current;
       const isAtTop = el.scrollTop <= 0;
       const isAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+
+      // Helper to update indicator only when changed (round force to 2 decimal places)
+      const updateIndicator = (force, direction) => {
+        const roundedForce = Math.round(force * 100) / 100;
+        if (
+          lastIndicatorRef.current.force !== roundedForce ||
+          lastIndicatorRef.current.direction !== direction
+        ) {
+          lastIndicatorRef.current = { force: roundedForce, direction };
+          setScrollForceIndicator({ force: roundedForce, direction });
+        }
+      };
 
       // Determine current scroll direction
       const currentDirection = e.deltaY < 0 ? "up" : "down";
@@ -1670,6 +1702,14 @@ const TreeChatInner = () => {
         }
         scrollAccumulatorRef.current += Math.abs(e.deltaY);
         e.preventDefault(); // Prevent page scroll
+
+        // Update indicator immediately for responsive feel
+        const SCROLL_FORCE_THRESHOLD = 1500;
+        const forceRatio = Math.min(
+          scrollAccumulatorRef.current / SCROLL_FORCE_THRESHOLD,
+          1
+        );
+        updateIndicator(forceRatio, "up");
       } else if (isAtBottom && currentDirection === "down") {
         // Reset if direction changed
         if (scrollDirectionRef.current !== "down") {
@@ -1678,10 +1718,22 @@ const TreeChatInner = () => {
         }
         scrollAccumulatorRef.current += Math.abs(e.deltaY);
         e.preventDefault(); // Prevent page scroll
+
+        // Update indicator immediately for responsive feel
+        const SCROLL_FORCE_THRESHOLD = 1500;
+        const forceRatio = Math.min(
+          scrollAccumulatorRef.current / SCROLL_FORCE_THRESHOLD,
+          1
+        );
+        updateIndicator(forceRatio, "down");
       } else {
-        scrollAccumulatorRef.current = 0;
-        scrollDirectionRef.current = null;
-        setScrollForceIndicator({ force: 0, direction: null });
+        // Not at boundary or wrong direction - reset
+        if (scrollAccumulatorRef.current > 0) {
+          scrollAccumulatorRef.current = 0;
+          scrollDirectionRef.current = null;
+          updateIndicator(0, null);
+        }
+        return; // Don't process further
       }
 
       // Clear accumulator after a pause
@@ -1689,31 +1741,24 @@ const TreeChatInner = () => {
       scrollTimeoutRef.current = setTimeout(() => {
         scrollAccumulatorRef.current = 0;
         scrollDirectionRef.current = null;
+        lastIndicatorRef.current = { force: 0, direction: null };
         setScrollForceIndicator({ force: 0, direction: null });
       }, 300);
 
-      // Threshold for navigation (lower = more sensitive)
+      // Threshold for navigation
       const SCROLL_FORCE_THRESHOLD = 1500;
 
-      // Update visual indicator (0 to 1)
-      const forceRatio = Math.min(
-        scrollAccumulatorRef.current / SCROLL_FORCE_THRESHOLD,
-        1
-      );
-      setScrollForceIndicator({
-        force: forceRatio,
-        direction: scrollDirectionRef.current,
-      });
-
       if (scrollAccumulatorRef.current >= SCROLL_FORCE_THRESHOLD) {
+        const navDirection = scrollDirectionRef.current;
         scrollAccumulatorRef.current = 0;
+        scrollDirectionRef.current = null;
+        lastIndicatorRef.current = { force: 0, direction: null };
         setScrollForceIndicator({ force: 0, direction: null });
-        if (scrollDirectionRef.current === "up") {
+        if (navDirection === "up") {
           navigateFocusMode("up");
-        } else if (scrollDirectionRef.current === "down") {
+        } else if (navDirection === "down") {
           navigateFocusMode("down");
         }
-        scrollDirectionRef.current = null;
       }
     },
     [navigateFocusMode]
@@ -1861,7 +1906,7 @@ const TreeChatInner = () => {
             top: 0,
             left: 0,
             right: 0,
-            bottom: 0,
+            bottom: 120, // Leave space for input panel
             backgroundColor: "rgba(0, 0, 0, 0.7)",
             zIndex: 1000,
             display: "flex",
@@ -1869,107 +1914,19 @@ const TreeChatInner = () => {
             justifyContent: "center",
             overflow: "auto",
             pt: 8,
-            pb: 16,
+            pb: 4,
           }}
           onClick={() => setFocusModeNodeId(null)}
         >
+          {/* Wrapper for scroll container and indicators */}
           <Box
-            ref={focusModeScrollRef}
-            onClick={(e) => e.stopPropagation()}
-            onDoubleClick={() => setFocusModeNodeId(null)}
-            onWheel={handleFocusModeScroll}
             sx={{
-              width: "min(900px, 85vw)",
-              maxHeight: "calc(100vh - 200px)",
-              overflowY: "auto",
-              backgroundColor: colors.bg.secondary,
-              border: `1px solid ${colors.border.primary}`,
-              borderRadius: 2,
-              outline: "none",
               position: "relative",
-              "&::-webkit-scrollbar": {
-                width: 8,
-              },
-              "&::-webkit-scrollbar-track": {
-                background: colors.bg.tertiary,
-                borderRadius: 4,
-              },
-              "&::-webkit-scrollbar-thumb": {
-                background: colors.border.primary,
-                borderRadius: 4,
-                "&:hover": {
-                  background: colors.text.dim,
-                },
-              },
+              width: "min(900px, 85vw)",
+              maxHeight: "calc(100vh - 280px)",
             }}
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* Navigation and close buttons */}
-            <Box
-              sx={{
-                position: "sticky",
-                top: 0,
-                right: 0,
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: 0.5,
-                p: 1,
-                backgroundColor: colors.bg.secondary,
-                borderBottom: `1px solid ${colors.border.secondary}`,
-                zIndex: 10,
-              }}
-            >
-              {/* Navigation hint */}
-              <Typography
-                variant="caption"
-                sx={{ color: colors.text.dim, mr: "auto", alignSelf: "center" }}
-              >
-                Scroll hard at edges to navigate • Double-click to close
-              </Typography>
-
-              {/* Up navigation */}
-              <IconButton
-                size="small"
-                onClick={() => navigateFocusMode("up")}
-                disabled={
-                  !focusModeNavigation.parent ||
-                  focusModeNavigation.parent.data?.isRoot
-                }
-                sx={{
-                  color: colors.text.muted,
-                  "&:hover": { color: colors.text.primary },
-                  "&.Mui-disabled": { color: colors.text.dim },
-                }}
-              >
-                <KeyboardArrowUpIcon />
-              </IconButton>
-
-              {/* Down navigation */}
-              <IconButton
-                size="small"
-                onClick={() => navigateFocusMode("down")}
-                disabled={focusModeNavigation.children.length === 0}
-                sx={{
-                  color: colors.text.muted,
-                  "&:hover": { color: colors.text.primary },
-                  "&.Mui-disabled": { color: colors.text.dim },
-                }}
-              >
-                <KeyboardArrowDownIcon />
-              </IconButton>
-
-              {/* Close button */}
-              <IconButton
-                size="small"
-                onClick={() => setFocusModeNodeId(null)}
-                sx={{
-                  color: colors.text.muted,
-                  "&:hover": { color: colors.text.primary },
-                }}
-              >
-                <CloseIcon />
-              </IconButton>
-            </Box>
-
             {/* Scroll force indicator - top (for scrolling up) */}
             {scrollForceIndicator.force > 0 &&
               scrollForceIndicator.direction === "up" && (
@@ -1984,7 +1941,7 @@ const TreeChatInner = () => {
                     background: `linear-gradient(90deg, transparent, ${colors.accent.green}, transparent)`,
                     opacity: 0.3 + scrollForceIndicator.force * 0.7,
                     borderRadius: "0 0 4px 4px",
-                    zIndex: 20,
+                    zIndex: 30,
                     transition: "width 0.1s ease-out, opacity 0.1s ease-out",
                     pointerEvents: "none",
                   }}
@@ -2005,109 +1962,211 @@ const TreeChatInner = () => {
                     background: `linear-gradient(90deg, transparent, ${colors.accent.green}, transparent)`,
                     opacity: 0.3 + scrollForceIndicator.force * 0.7,
                     borderRadius: "4px 4px 0 0",
-                    zIndex: 20,
+                    zIndex: 30,
                     transition: "width 0.1s ease-out, opacity 0.1s ease-out",
                     pointerEvents: "none",
                   }}
                 />
               )}
 
-            {/* User message */}
             <Box
+              ref={focusModeScrollRef}
+              onDoubleClick={() => setFocusModeNodeId(null)}
+              onWheel={handleFocusModeScroll}
               sx={{
-                p: 3,
-                backgroundColor: colors.bg.userMessage,
-                borderBottom: `1px solid ${colors.border.secondary}`,
+                width: "100%",
+                maxHeight: "calc(100vh - 280px)",
+                overflowY: "auto",
+                backgroundColor: colors.bg.secondary,
+                border: `1px solid ${colors.border.primary}`,
+                borderRadius: 2,
+                outline: "none",
+                "&::-webkit-scrollbar": {
+                  width: 8,
+                },
+                "&::-webkit-scrollbar-track": {
+                  background: colors.bg.tertiary,
+                  borderRadius: 4,
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  background: colors.border.primary,
+                  borderRadius: 4,
+                  "&:hover": {
+                    background: colors.text.dim,
+                  },
+                },
               }}
             >
+              {/* Navigation and close buttons */}
               <Box
-                sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{ color: colors.accent.userLabel, fontWeight: 500 }}
-                >
-                  You
-                </Typography>
-                <IconButton
-                  size="small"
-                  onClick={() => {
-                    if (focusModeNode.data?.userMessage)
-                      navigator.clipboard.writeText(
-                        focusModeNode.data.userMessage
-                      );
-                  }}
-                  sx={{
-                    opacity: 0.4,
-                    "&:hover": { opacity: 1 },
-                    color: colors.text.muted,
-                    width: 20,
-                    height: 20,
-                  }}
-                >
-                  <ContentCopyIcon sx={{ fontSize: 14 }} />
-                </IconButton>
-              </Box>
-              <Typography
-                variant="body1"
-                className="ph-no-capture"
                 sx={{
-                  color: colors.text.primary,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  fontSize: "1rem",
-                  lineHeight: 1.7,
+                  position: "sticky",
+                  top: 0,
+                  right: 0,
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 0.5,
+                  p: 1,
+                  backgroundColor: colors.bg.secondary,
+                  borderBottom: `1px solid ${colors.border.secondary}`,
+                  zIndex: 10,
                 }}
               >
-                {focusModeNode.data?.userMessage}
-              </Typography>
-            </Box>
+                {/* Navigation hint */}
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: colors.text.dim,
+                    mr: "auto",
+                    alignSelf: "center",
+                  }}
+                >
+                  Scroll hard at edges to navigate • Double-click to close
+                </Typography>
 
-            {/* Assistant response */}
-            <Box sx={{ p: 3 }}>
-              <Box
-                sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{ color: colors.accent.green, fontWeight: 500 }}
-                >
-                  {focusModeNode.data?.model || "Assistant"}
-                </Typography>
+                {/* Up navigation */}
                 <IconButton
                   size="small"
-                  onClick={() => {
-                    if (focusModeNode.data?.assistantMessage)
-                      navigator.clipboard.writeText(
-                        focusModeNode.data.assistantMessage
-                      );
-                  }}
+                  onClick={() => navigateFocusMode("up")}
+                  disabled={
+                    !focusModeNavigation.parent ||
+                    focusModeNavigation.parent.data?.isRoot
+                  }
                   sx={{
-                    opacity: 0.4,
-                    "&:hover": { opacity: 1 },
                     color: colors.text.muted,
-                    width: 20,
-                    height: 20,
+                    "&:hover": { color: colors.text.primary },
+                    "&.Mui-disabled": { color: colors.text.dim },
                   }}
                 >
-                  <ContentCopyIcon sx={{ fontSize: 14 }} />
+                  <KeyboardArrowUpIcon />
+                </IconButton>
+
+                {/* Down navigation */}
+                <IconButton
+                  size="small"
+                  onClick={() => navigateFocusMode("down")}
+                  disabled={focusModeNavigation.children.length === 0}
+                  sx={{
+                    color: colors.text.muted,
+                    "&:hover": { color: colors.text.primary },
+                    "&.Mui-disabled": { color: colors.text.dim },
+                  }}
+                >
+                  <KeyboardArrowDownIcon />
+                </IconButton>
+
+                {/* Close button */}
+                <IconButton
+                  size="small"
+                  onClick={() => setFocusModeNodeId(null)}
+                  sx={{
+                    color: colors.text.muted,
+                    "&:hover": { color: colors.text.primary },
+                  }}
+                >
+                  <CloseIcon />
                 </IconButton>
               </Box>
-              <Typography
-                variant="body1"
-                className="ph-no-capture"
+
+              {/* User message */}
+              <Box
                 sx={{
-                  color: colors.text.primary,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  fontSize: "1rem",
-                  lineHeight: 1.7,
+                  p: 3,
+                  backgroundColor: colors.bg.userMessage,
+                  borderBottom: `1px solid ${colors.border.secondary}`,
                 }}
               >
-                {focusModeNode.data?.assistantMessage}
-              </Typography>
+                <Box
+                  sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{ color: colors.accent.userLabel, fontWeight: 500 }}
+                  >
+                    You
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      if (focusModeNode.data?.userMessage)
+                        navigator.clipboard.writeText(
+                          focusModeNode.data.userMessage
+                        );
+                    }}
+                    sx={{
+                      opacity: 0.4,
+                      "&:hover": { opacity: 1 },
+                      color: colors.text.muted,
+                      width: 20,
+                      height: 20,
+                    }}
+                  >
+                    <ContentCopyIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Box>
+                <Typography
+                  variant="body1"
+                  className="ph-no-capture"
+                  sx={{
+                    color: colors.text.primary,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    fontSize: "1rem",
+                    lineHeight: 1.7,
+                  }}
+                >
+                  {focusModeNode.data?.userMessage}
+                </Typography>
+              </Box>
+
+              {/* Assistant response */}
+              <Box sx={{ p: 3 }}>
+                <Box
+                  sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{ color: colors.accent.green, fontWeight: 500 }}
+                  >
+                    {focusModeNode.data?.model || "Assistant"}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      if (focusModeNode.data?.assistantMessage)
+                        navigator.clipboard.writeText(
+                          focusModeNode.data.assistantMessage
+                        );
+                    }}
+                    sx={{
+                      opacity: 0.4,
+                      "&:hover": { opacity: 1 },
+                      color: colors.text.muted,
+                      width: 20,
+                      height: 20,
+                    }}
+                  >
+                    <ContentCopyIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Box>
+                <Typography
+                  variant="body1"
+                  className="ph-no-capture"
+                  sx={{
+                    color: colors.text.primary,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    fontSize: "1rem",
+                    lineHeight: 1.7,
+                  }}
+                >
+                  {focusModeNode.data?.assistantMessage}
+                </Typography>
+              </Box>
             </Box>
+            {/* End of scrollable content */}
           </Box>
+          {/* End of wrapper */}
         </Box>
       )}
     </Box>
