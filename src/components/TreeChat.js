@@ -8,7 +8,6 @@ import React, {
 } from "react";
 import ReactFlow, {
   Controls,
-  ControlButton,
   Background,
   useNodesState,
   useEdgesState,
@@ -16,8 +15,6 @@ import ReactFlow, {
   useReactFlow,
   Panel,
 } from "reactflow";
-import SwapVertIcon from "@mui/icons-material/SwapVert";
-import PanToolIcon from "@mui/icons-material/PanTool";
 import "reactflow/dist/style.css";
 import { Box, Snackbar, Alert } from "@mui/material";
 
@@ -29,6 +26,7 @@ import WaitlistModal from "./WaitlistModal";
 import InfoPanel from "./InfoPanel";
 import InputPanel from "./InputPanel";
 import FocusModeOverlay from "./FocusModeOverlay";
+import PanScrollToggle from "./PanScrollToggle";
 
 // Hooks
 import { useChatApi } from "../hooks/useChatApi";
@@ -85,7 +83,9 @@ const TreeChatInner = () => {
   });
 
   // Pan on scroll state (true = scroll to pan, false = scroll to zoom)
-  const [panOnScroll, setPanOnScroll] = useState(true);
+  const [panOnScroll, setPanOnScroll] = useState(
+    () => settings.panOnScroll !== false
+  );
 
   // Merge state
   const [mergeMode, setMergeMode] = useState(null);
@@ -335,6 +335,8 @@ const TreeChatInner = () => {
   const handleSaveSettings = useCallback((newSettings) => {
     setSettings(newSettings);
     saveSettings(newSettings, newSettings.saveApiKey);
+    // Sync panOnScroll with settings
+    setPanOnScroll(newSettings.panOnScroll !== false);
   }, []);
 
   // Share current chat
@@ -492,20 +494,11 @@ const TreeChatInner = () => {
           }}
           className="custom-controls"
         >
-          <ControlButton
-            onClick={() => setPanOnScroll((prev) => !prev)}
-            title={
-              panOnScroll
-                ? "Scroll to pan (click to switch to zoom)"
-                : "Scroll to zoom (click to switch to pan)"
-            }
-          >
-            {panOnScroll ? (
-              <PanToolIcon sx={{ fontSize: 16, color: colors.text.primary }} />
-            ) : (
-              <SwapVertIcon sx={{ fontSize: 16, color: colors.text.primary }} />
-            )}
-          </ControlButton>
+          <PanScrollToggle
+            panOnScroll={panOnScroll}
+            onToggle={() => setPanOnScroll((prev) => !prev)}
+            size="small"
+          />
         </Controls>
 
         {/* Input Panel */}

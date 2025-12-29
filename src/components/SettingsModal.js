@@ -10,10 +10,12 @@ import {
   IconButton,
   Checkbox,
   FormControlLabel,
+  Divider,
 } from "@mui/material";
 import SyncIcon from "@mui/icons-material/Sync";
 import { colors, components, typography } from "../styles/theme";
 import { defaultModels } from "../utils/constants";
+import PanScrollToggle from "./PanScrollToggle";
 
 const SettingsModal = ({
   open,
@@ -176,6 +178,29 @@ const SettingsModal = ({
             Your API key is stored locally in your browser and sent directly to
             OpenAI. We never see or store your key on any server.
           </Typography>
+
+          <Divider sx={{ borderColor: colors.border.secondary, my: 1 }} />
+
+          <Typography variant="subtitle2" sx={{ color: colors.text.primary }}>
+            Canvas Controls
+          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <PanScrollToggle
+              panOnScroll={tempSettings.panOnScroll !== false}
+              onToggle={() =>
+                setTempSettings({
+                  ...tempSettings,
+                  panOnScroll: !tempSettings.panOnScroll,
+                })
+              }
+            />
+            <Typography variant="body2" sx={typography.secondary}>
+              {tempSettings.panOnScroll !== false
+                ? "Scroll to pan"
+                : "Scroll to zoom"}
+            </Typography>
+          </Box>
+
           <Typography
             component="a"
             href="/privacy"
