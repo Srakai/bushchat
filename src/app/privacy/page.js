@@ -8,8 +8,8 @@ export default function PrivacyPage() {
       No Cookies: This site does not use cookies for tracking. <br /> <br />
       Analytics: We use PostHog (configured in privacy-mode) solely to count
       aggregate page views and feature usage (e.g., "How many users clicked
-      'Merge'"). Open Source: You can verify this configuration in our GitHub
-      Repository.
+      'Merge'"). <br /> <br />
+      Open Source: You can verify this configuration in our GitHub Repository.
     </div>
   );
 }
