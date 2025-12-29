@@ -46,6 +46,7 @@ import {
   loadSettings,
   saveSettings,
   generateChatId,
+  generateGroupId,
 } from "../utils/storage";
 import { useChatApi } from "../hooks/useChatApi";
 import {
@@ -65,6 +66,9 @@ const edgeTypes = {
 // Default prompt for merge operations - can be customized by the user before submitting
 const DEFAULT_MERGE_PROMPT =
   "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
+
+// Horizontal offset between trees in grouped view
+const TREE_HORIZONTAL_OFFSET = 600;
 
 const TreeChatInner = () => {
   // Chat management state
@@ -90,17 +94,125 @@ const TreeChatInner = () => {
     severity: "success",
   });
 
+  // Get the active chat's group info
+  const activeGroupInfo = useMemo(() => {
+    const activeChat = chatsList.find((c) => c.id === activeChatId);
+    if (!activeChat?.groupId) return null;
+
+    const groupMembers = chatsList
+      .filter((c) => c.groupId === activeChat.groupId)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    // A group with <2 members is not a group.
+    if (groupMembers.length < 2) return null;
+
+    return {
+      groupId: activeChat.groupId,
+      members: groupMembers,
+      focusedChatId: activeChatId,
+    };
+  }, [chatsList, activeChatId]);
+
+  // Normalize orphaned groups (size < 2) back to ungrouped.
+  // This can happen after deleting a chat from a group.
+  useEffect(() => {
+    const counts = {};
+    chatsList.forEach((chat) => {
+      if (!chat.groupId) return;
+      counts[chat.groupId] = (counts[chat.groupId] || 0) + 1;
+    });
+
+    const orphanGroupIds = Object.entries(counts)
+      .filter(([, count]) => count < 2)
+      .map(([groupId]) => groupId);
+
+    if (orphanGroupIds.length === 0) return;
+
+    const orphanSet = new Set(orphanGroupIds);
+    const normalized = chatsList.map((chat) =>
+      orphanSet.has(chat.groupId) ? { ...chat, groupId: null } : chat
+    );
+
+    saveChatsList(normalized);
+    setChatsList(normalized);
+  }, [chatsList]);
+
   // Load initial state from localStorage or use defaults
   const savedState = useMemo(() => loadChatState(activeChatId), [activeChatId]);
 
+  // Load all grouped states when in a group
+  const groupedStates = useMemo(() => {
+    if (!activeGroupInfo) return null;
+
+    const states = {};
+    activeGroupInfo.members.forEach((member, index) => {
+      const state = loadChatState(member.id);
+      states[member.id] = {
+        chatId: member.id,
+        nodes: state?.nodes || initialNodes,
+        edges: state?.edges || initialEdges,
+        selectedNodeId: state?.selectedNodeId || "root",
+        nodeIdCounter: state?.nodeIdCounter || 1,
+        offset: { x: index * TREE_HORIZONTAL_OFFSET, y: 0 }, // Offset each tree horizontally
+      };
+    });
+    return states;
+  }, [activeGroupInfo]);
+
+  // Combine all group trees into a single node/edge array with prefixed IDs
+  const combinedGroupState = useMemo(() => {
+    if (!groupedStates) return null;
+
+    const allNodes = [];
+    const allEdges = [];
+
+    Object.values(groupedStates).forEach(
+      ({ chatId, nodes: treeNodes, edges: treeEdges, offset }) => {
+        // Add prefixed and offset nodes
+        treeNodes.forEach((node) => {
+          allNodes.push({
+            ...node,
+            id: `${chatId}:${node.id}`,
+            position: {
+              x: node.position.x + offset.x,
+              y: node.position.y + offset.y,
+            },
+            data: {
+              ...node.data,
+              chatId, // Track which chat this node belongs to
+            },
+          });
+        });
+
+        // Add prefixed edges
+        treeEdges.forEach((edge) => {
+          allEdges.push({
+            ...edge,
+            id: `${chatId}:${edge.id}`,
+            source: `${chatId}:${edge.source}`,
+            target: `${chatId}:${edge.target}`,
+          });
+        });
+      }
+    );
+
+    return { nodes: allNodes, edges: allEdges };
+  }, [groupedStates]);
+
   const [nodes, setNodes, onNodesChange] = useNodesState(
-    savedState?.nodes || initialNodes
+    combinedGroupState?.nodes || savedState?.nodes || initialNodes
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(
-    savedState?.edges || initialEdges
+    combinedGroupState?.edges || savedState?.edges || initialEdges
   );
+
+  // Track the focused chat ID within a group (which tree receives input)
+  const [focusedChatId, setFocusedChatId] = useState(activeChatId);
+
   const [selectedNodeId, setSelectedNodeId] = useState(
-    savedState?.selectedNodeId || "root"
+    activeGroupInfo
+      ? `${activeChatId}:${savedState?.selectedNodeId || "root"}`
+      : savedState?.selectedNodeId || "root"
   );
   const [inputMessage, setInputMessage] = useState("");
   const [selectedModel, setSelectedModel] = useState(defaultModels[0]);
@@ -108,7 +220,7 @@ const TreeChatInner = () => {
   const [mergeMode, setMergeMode] = useState(null);
   const [pendingMerge, setPendingMerge] = useState(null);
   const nodeIdCounter = useRef(savedState?.nodeIdCounter || 1);
-  const { fitView } = useReactFlow();
+  const { fitView, getNodes } = useReactFlow();
 
   // Chat API hook
   const { sendChatRequest } = useChatApi(settings);
@@ -117,17 +229,84 @@ const TreeChatInner = () => {
   useEffect(() => {
     if (isSharedView) return; // Don't auto-save shared chats until user takes action
     const timeoutId = setTimeout(() => {
-      saveChatState(
-        activeChatId,
-        nodes,
-        edges,
-        selectedNodeId,
-        nodeIdCounter.current
-      );
+      if (activeGroupInfo) {
+        // For grouped chats, split the combined state back to individual chats
+        activeGroupInfo.members.forEach((member) => {
+          const chatPrefix = `${member.id}:`;
+
+          // Extract nodes for this chat (remove prefix and offset)
+          // Guardrail: only save grouped state if we actually have prefixed nodes.
+          // Otherwise we'd overwrite existing chats with the empty/initial template.
+          const prefixedNodes = nodes.filter((n) =>
+            n.id.startsWith(chatPrefix)
+          );
+          if (prefixedNodes.length === 0) {
+            return;
+          }
+
+          const chatNodes = prefixedNodes.map((n) => {
+            const originalId = n.id.replace(chatPrefix, "");
+            const state = groupedStates?.[member.id];
+            const offset = state?.offset || { x: 0, y: 0 };
+            return {
+              ...n,
+              id: originalId,
+              position: {
+                x: n.position.x - offset.x,
+                y: n.position.y - offset.y,
+              },
+              data: {
+                ...n.data,
+                chatId: undefined, // Remove chatId marker
+              },
+            };
+          });
+
+          // Extract edges for this chat (remove prefix)
+          const chatEdges = edges
+            .filter((e) => e.id.startsWith(chatPrefix))
+            .map((e) => ({
+              ...e,
+              id: e.id.replace(chatPrefix, ""),
+              source: e.source.replace(chatPrefix, ""),
+              target: e.target.replace(chatPrefix, ""),
+            }));
+
+          // Get selected node for this chat
+          const selectedForChat = selectedNodeId.startsWith(chatPrefix)
+            ? selectedNodeId.replace(chatPrefix, "")
+            : "root";
+
+          saveChatState(
+            member.id,
+            chatNodes.length > 0 ? chatNodes : initialNodes,
+            chatEdges,
+            selectedForChat,
+            nodeIdCounter.current
+          );
+        });
+      } else {
+        // Single chat save
+        saveChatState(
+          activeChatId,
+          nodes,
+          edges,
+          selectedNodeId,
+          nodeIdCounter.current
+        );
+      }
       setChatsList(loadChatsList()); // Refresh list to get updated names
     }, 500); // Debounce saves
     return () => clearTimeout(timeoutId);
-  }, [nodes, edges, selectedNodeId, activeChatId, isSharedView]);
+  }, [
+    nodes,
+    edges,
+    selectedNodeId,
+    activeChatId,
+    isSharedView,
+    activeGroupInfo,
+    groupedStates,
+  ]);
 
   // Load shared chat from URL hash on mount
   const sharedChatLoadedRef = useRef(false);
@@ -187,23 +366,151 @@ const TreeChatInner = () => {
     (chatId) => {
       setActiveChatId(chatId);
       setActiveChatIdState(chatId);
+      setFocusedChatId(chatId);
       setIsSharedView(false); // Clear shared view when switching to saved chat
-      const chatState = loadChatState(chatId);
-      if (chatState) {
-        setNodes(chatState.nodes || initialNodes);
-        setEdges(chatState.edges || initialEdges);
-        setSelectedNodeId(chatState.selectedNodeId || "root");
-        nodeIdCounter.current = chatState.nodeIdCounter || 1;
+
+      // Check if this chat is part of a group
+      const targetChat = chatsList.find((c) => c.id === chatId);
+      const isGrouped = targetChat?.groupId;
+
+      if (isGrouped) {
+        // Load all chats in the group
+        const groupMembers = chatsList
+          .filter((c) => c.groupId === targetChat.groupId)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        // If the group has only one member, dissolve it.
+        if (groupMembers.length < 2) {
+          const updatedList = chatsList.map((c) =>
+            c.groupId === targetChat.groupId ? { ...c, groupId: null } : c
+          );
+          saveChatsList(updatedList);
+          setChatsList(updatedList);
+
+          // Continue as a single chat
+          const chatState = loadChatState(chatId);
+          if (chatState) {
+            setNodes(chatState.nodes || initialNodes);
+            setEdges(chatState.edges || initialEdges);
+            setSelectedNodeId(chatState.selectedNodeId || "root");
+            nodeIdCounter.current = chatState.nodeIdCounter || 1;
+          } else {
+            setNodes(initialNodes);
+            setEdges(initialEdges);
+            setSelectedNodeId("root");
+            nodeIdCounter.current = 1;
+          }
+
+          setMergeMode(null);
+          setTimeout(() => fitView({ padding: 0.2 }), 100);
+          return;
+        }
+
+        const allNodes = [];
+        const allEdges = [];
+        let maxNodeIdCounter = 1;
+
+        groupMembers.forEach((member, index) => {
+          const state = loadChatState(member.id);
+          const offset = { x: index * TREE_HORIZONTAL_OFFSET, y: 0 };
+
+          // Add prefixed and offset nodes
+          const memberNodes = state?.nodes || initialNodes;
+          memberNodes.forEach((node) => {
+            allNodes.push({
+              ...node,
+              id: `${member.id}:${node.id}`,
+              position: {
+                x: node.position.x + offset.x,
+                y: node.position.y + offset.y,
+              },
+              data: {
+                ...node.data,
+                chatId: member.id,
+              },
+            });
+          });
+
+          // Add prefixed edges
+          const memberEdges = state?.edges || initialEdges;
+          memberEdges.forEach((edge) => {
+            allEdges.push({
+              ...edge,
+              id: `${member.id}:${edge.id}`,
+              source: `${member.id}:${edge.source}`,
+              target: `${member.id}:${edge.target}`,
+            });
+          });
+
+          if (state?.nodeIdCounter > maxNodeIdCounter) {
+            maxNodeIdCounter = state.nodeIdCounter;
+          }
+        });
+
+        setNodes(allNodes);
+        setEdges(allEdges);
+
+        // Set selected node to the root of the clicked chat
+        const chatState = loadChatState(chatId);
+        setSelectedNodeId(`${chatId}:${chatState?.selectedNodeId || "root"}`);
+        nodeIdCounter.current = maxNodeIdCounter;
       } else {
-        setNodes(initialNodes);
-        setEdges(initialEdges);
-        setSelectedNodeId("root");
-        nodeIdCounter.current = 1;
+        // Single chat - load normally
+        const chatState = loadChatState(chatId);
+        if (chatState) {
+          setNodes(chatState.nodes || initialNodes);
+          setEdges(chatState.edges || initialEdges);
+          setSelectedNodeId(chatState.selectedNodeId || "root");
+          nodeIdCounter.current = chatState.nodeIdCounter || 1;
+        } else {
+          setNodes(initialNodes);
+          setEdges(initialEdges);
+          setSelectedNodeId("root");
+          nodeIdCounter.current = 1;
+        }
       }
+
       setMergeMode(null);
       setTimeout(() => fitView({ padding: 0.2 }), 100);
     },
-    [setNodes, setEdges, fitView]
+    [setNodes, setEdges, fitView, chatsList]
+  );
+
+  // In grouped view, selecting a member from the list should focus that tree
+  // without reloading/switching chats (prevents losing unsaved in-memory edits).
+  const focusChatInGroup = useCallback(
+    (chatId) => {
+      const activeChat = chatsList.find((c) => c.id === activeChatId);
+      const targetChat = chatsList.find((c) => c.id === chatId);
+
+      if (!activeChat?.groupId || !targetChat?.groupId) {
+        switchToChat(chatId);
+        return;
+      }
+
+      if (activeChat.groupId !== targetChat.groupId) {
+        switchToChat(chatId);
+        return;
+      }
+
+      setFocusedChatId(chatId);
+      const chatState = loadChatState(chatId);
+      setSelectedNodeId(`${chatId}:${chatState?.selectedNodeId || "root"}`);
+
+      // Fit view to nodes belonging to this chat's tree.
+      setTimeout(() => {
+        const prefix = `${chatId}:`;
+        const nodesToFit = (getNodes() || []).filter(
+          (n) => typeof n.id === "string" && n.id.startsWith(prefix)
+        );
+        if (nodesToFit.length > 0) {
+          fitView({ padding: 0.2, duration: 300, nodes: nodesToFit });
+        } else {
+          fitView({ padding: 0.2, duration: 300 });
+        }
+      }, 50);
+    },
+    [activeChatId, chatsList, fitView, getNodes, switchToChat]
   );
 
   // Create a new chat
@@ -227,7 +534,23 @@ const TreeChatInner = () => {
       e.stopPropagation();
       if (chatsList.length <= 1) return; // Don't delete last chat
 
-      const updatedList = chatsList.filter((c) => c.id !== chatId);
+      const deletedChat = chatsList.find((c) => c.id === chatId);
+      const deletedGroupId = deletedChat?.groupId;
+
+      let updatedList = chatsList.filter((c) => c.id !== chatId);
+
+      // If deletion leaves a group with <2 members, dissolve it.
+      if (deletedGroupId) {
+        const remaining = updatedList.filter(
+          (c) => c.groupId === deletedGroupId
+        );
+        if (remaining.length < 2) {
+          updatedList = updatedList.map((c) =>
+            c.groupId === deletedGroupId ? { ...c, groupId: null } : c
+          );
+        }
+      }
+
       saveChatsList(updatedList);
       setChatsList(updatedList);
 
@@ -240,6 +563,165 @@ const TreeChatInner = () => {
       }
     },
     [chatsList, activeChatId, switchToChat]
+  );
+
+  // Move a chat (reorder)
+  const moveChat = useCallback(
+    (draggedChatId, targetChatId, insertBefore) => {
+      const updatedList = [...chatsList];
+
+      // Find the dragged and target chats
+      const draggedIndex = updatedList.findIndex((c) => c.id === draggedChatId);
+      const targetIndex = updatedList.findIndex((c) => c.id === targetChatId);
+
+      if (draggedIndex === -1 || targetIndex === -1) return;
+
+      const draggedChat = updatedList[draggedIndex];
+      const targetChat = updatedList[targetIndex];
+
+      // If dragged chat is in a group, keep it in that group
+      // If target chat is in a different group, move dragged to that group
+      if (targetChat.groupId && draggedChat.groupId !== targetChat.groupId) {
+        // Can't move between groups if it would nest (groups are flat)
+        // But we can move into a group
+        draggedChat.groupId = targetChat.groupId;
+      } else if (!targetChat.groupId && draggedChat.groupId) {
+        // Moving out of a group to ungrouped
+        // Check if this would leave the group with < 2 members
+        const groupMembers = updatedList.filter(
+          (c) => c.groupId === draggedChat.groupId && c.id !== draggedChat.id
+        );
+        if (groupMembers.length < 2) {
+          // Ungroup all remaining members
+          groupMembers.forEach((member) => {
+            member.groupId = null;
+          });
+        }
+        draggedChat.groupId = null;
+      }
+
+      // Remove dragged chat from list
+      updatedList.splice(draggedIndex, 1);
+
+      // Find new target index (it may have shifted)
+      const newTargetIndex = updatedList.findIndex(
+        (c) => c.id === targetChatId
+      );
+
+      // Insert at the right position
+      const insertIndex = insertBefore ? newTargetIndex : newTargetIndex + 1;
+      updatedList.splice(insertIndex, 0, draggedChat);
+
+      // Update order values for all items
+      updatedList.forEach((chat, index) => {
+        chat.order = index;
+      });
+
+      saveChatsList(updatedList);
+      setChatsList(updatedList);
+    },
+    [chatsList]
+  );
+
+  // Merge two chats into a group
+  const mergeChats = useCallback(
+    (draggedChatId, targetChatId) => {
+      if (draggedChatId === targetChatId) return;
+
+      const updatedList = [...chatsList];
+      const draggedChat = updatedList.find((c) => c.id === draggedChatId);
+      const targetChat = updatedList.find((c) => c.id === targetChatId);
+
+      if (!draggedChat || !targetChat) return;
+
+      // Prevent nesting - if either chat is already in a group, we can't create new groups
+      // This ensures flat group structure (no nested groups)
+      if (draggedChat.groupId || targetChat.groupId) {
+        setSnackbar({
+          open: true,
+          message: "Cannot group chats that are already in a group",
+          severity: "warning",
+        });
+        return;
+      }
+
+      // Create a new group
+      const newGroupId = generateGroupId();
+
+      // Add both chats to the group
+      draggedChat.groupId = newGroupId;
+      targetChat.groupId = newGroupId;
+
+      saveChatsList(updatedList);
+      setChatsList(updatedList);
+
+      // If the active chat is now grouped, immediately switch the canvas into grouped mode.
+      // This prevents the debounced grouped autosave from treating unprefixed nodes as "empty"
+      // and overwriting existing chat history with the initial template.
+      if (activeChatId === draggedChatId || activeChatId === targetChatId) {
+        const groupMembers = updatedList
+          .filter((c) => c.groupId === newGroupId)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        const allNodes = [];
+        const allEdges = [];
+        let maxNodeIdCounter = 1;
+
+        groupMembers.forEach((member, index) => {
+          const state = loadChatState(member.id);
+          const offset = { x: index * TREE_HORIZONTAL_OFFSET, y: 0 };
+
+          const memberNodes = state?.nodes || initialNodes;
+          memberNodes.forEach((node) => {
+            allNodes.push({
+              ...node,
+              id: `${member.id}:${node.id}`,
+              position: {
+                x: node.position.x + offset.x,
+                y: node.position.y + offset.y,
+              },
+              data: {
+                ...node.data,
+                chatId: member.id,
+              },
+            });
+          });
+
+          const memberEdges = state?.edges || initialEdges;
+          memberEdges.forEach((edge) => {
+            allEdges.push({
+              ...edge,
+              id: `${member.id}:${edge.id}`,
+              source: `${member.id}:${edge.source}`,
+              target: `${member.id}:${edge.target}`,
+            });
+          });
+
+          if ((state?.nodeIdCounter || 1) > maxNodeIdCounter) {
+            maxNodeIdCounter = state.nodeIdCounter;
+          }
+        });
+
+        setNodes(allNodes);
+        setEdges(allEdges);
+
+        const activeState = loadChatState(activeChatId);
+        setSelectedNodeId(
+          `${activeChatId}:${activeState?.selectedNodeId || "root"}`
+        );
+        setFocusedChatId(activeChatId);
+        nodeIdCounter.current = maxNodeIdCounter;
+        setTimeout(() => fitView({ padding: 0.2 }), 100);
+      }
+
+      // Show confirmation
+      setSnackbar({
+        open: true,
+        message: "Chats grouped together",
+        severity: "success",
+      });
+    },
+    [chatsList, activeChatId, fitView, setEdges, setNodes]
   );
 
   // Save settings handler
@@ -377,7 +859,12 @@ const TreeChatInner = () => {
       // Commit shared chat to storage when user takes action
       if (isSharedView) commitSharedChat();
 
-      const newNodeId = `node-${nodeIdCounter.current++}`;
+      // Check if we're in grouped mode by looking for a prefix
+      const colonIndex = parentNodeId.indexOf(":");
+      const chatPrefix =
+        colonIndex !== -1 ? parentNodeId.substring(0, colonIndex + 1) : "";
+
+      const newNodeId = `${chatPrefix}node-${nodeIdCounter.current++}`;
 
       // Get parent node position
       const parentNode = nodes.find((n) => n.id === parentNodeId);
@@ -400,6 +887,7 @@ const TreeChatInner = () => {
           assistantMessage: "",
           status: "loading",
           isRoot: false,
+          chatId: chatPrefix ? chatPrefix.slice(0, -1) : undefined,
         },
       };
 
@@ -408,7 +896,10 @@ const TreeChatInner = () => {
       setEdges((eds) => [
         ...eds,
         {
-          id: `edge-${parentNodeId}-${newNodeId}`,
+          id: `${chatPrefix}edge-${parentNodeId.replace(
+            chatPrefix,
+            ""
+          )}-${newNodeId.replace(chatPrefix, "")}`,
           source: parentNodeId,
           target: newNodeId,
           type: "smoothstep",
@@ -637,7 +1128,8 @@ const TreeChatInner = () => {
   // Handle deleting a node and its descendants
   const handleDeleteNode = useCallback(
     (nodeId) => {
-      if (nodeId === "root") return;
+      // Check for root node (with or without prefix)
+      if (nodeId === "root" || nodeId.endsWith(":root")) return;
 
       // Commit shared chat to storage when user takes action
       if (isSharedView) commitSharedChat();
@@ -646,7 +1138,12 @@ const TreeChatInner = () => {
       const nodesToRemove = new Set([nodeId, ...descendants]);
 
       const parentEdge = edges.find((e) => e.target === nodeId);
-      const parentId = parentEdge?.source || "root";
+
+      // Handle prefixed parent ID for grouped mode
+      const colonIndex = nodeId.indexOf(":");
+      const chatPrefix =
+        colonIndex !== -1 ? nodeId.substring(0, colonIndex + 1) : "";
+      const parentId = parentEdge?.source || `${chatPrefix}root`;
 
       setNodes((nds) => nds.filter((n) => !nodesToRemove.has(n.id)));
       setEdges((eds) =>
@@ -815,7 +1312,8 @@ const TreeChatInner = () => {
   // Handle merge - first click selects first node, second click prepares merge
   const handleMergeNode = useCallback(
     (nodeId) => {
-      if (nodeId === "root") return;
+      // Check for root node (with or without prefix)
+      if (nodeId === "root" || nodeId.endsWith(":root")) return;
 
       if (!mergeMode) {
         setMergeMode({ firstNodeId: nodeId });
@@ -870,7 +1368,7 @@ const TreeChatInner = () => {
         document.getElementById("message-input")?.focus();
       }, 100);
     },
-    [mergeMode, nodes, edges]
+    [mergeMode, nodes, edges, isSharedView, commitSharedChat]
   );
 
   // Inject callbacks into all nodes
@@ -1057,6 +1555,11 @@ const TreeChatInner = () => {
   // Handle node selection
   const onNodeClick = useCallback((_, node) => {
     setSelectedNodeId(node.id);
+
+    // If in a grouped view, update the focused chat based on which tree was clicked
+    if (node.data?.chatId) {
+      setFocusedChatId(node.data.chatId);
+    }
   }, []);
 
   return (
@@ -1115,9 +1618,14 @@ const TreeChatInner = () => {
           <InfoPanel
             chatsList={chatsList}
             activeChatId={activeChatId}
+            focusedChatId={focusedChatId}
+            activeGroupId={activeGroupInfo?.groupId || null}
             onCreateNewChat={createNewChat}
             onSwitchChat={switchToChat}
+            onFocusChatInGroup={focusChatInGroup}
             onDeleteChat={deleteChat}
+            onMoveChat={moveChat}
+            onMergeChats={mergeChats}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenWaitlist={() => setWaitlistOpen(true)}
             onShareChat={handleShareChat}

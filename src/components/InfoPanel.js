@@ -1,5 +1,7 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { DndProvider } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
 import {
   Paper,
   Typography,
@@ -8,35 +10,120 @@ import {
   IconButton,
   Collapse,
   List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
   Divider,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SettingsIcon from "@mui/icons-material/Settings";
 import CloudIcon from "@mui/icons-material/Cloud";
 import ShareIcon from "@mui/icons-material/Share";
 import GitHubIcon from "@mui/icons-material/GitHub";
+import DraggableChatItem from "./DraggableChatItem";
 import { colors, components, typography } from "../styles/theme";
 
 const InfoPanel = ({
   chatsList,
   activeChatId,
+  focusedChatId,
+  activeGroupId,
   onCreateNewChat,
   onSwitchChat,
+  onFocusChatInGroup,
   onDeleteChat,
   onOpenSettings,
   onOpenWaitlist,
   onShareChat,
+  onMoveChat,
+  onMergeChats,
   mergeMode,
   onCancelMerge,
   conversationHistoryLength,
 }) => {
   const [chatsExpanded, setChatsExpanded] = useState(false);
+
+  // Organize chats into groups and ungrouped items
+  // Groups are displayed with their members indented
+  const organizedChats = useMemo(() => {
+    const groups = {};
+    const ungrouped = [];
+
+    chatsList.forEach((chat) => {
+      if (chat.groupId) {
+        if (!groups[chat.groupId]) {
+          groups[chat.groupId] = [];
+        }
+        groups[chat.groupId].push(chat);
+      } else {
+        ungrouped.push(chat);
+      }
+    });
+
+    // Sort each group by order
+    Object.values(groups).forEach((group) => {
+      group.sort((a, b) => (a.order || 0) - (b.order || 0));
+    });
+
+    // If a "group" has only 1 member, treat it as ungrouped in the UI.
+    // (This can happen after deleting a chat from a group.)
+    Object.entries(groups).forEach(([groupId, members]) => {
+      if (members.length < 2) {
+        members.forEach((chat) => ungrouped.push(chat));
+        delete groups[groupId];
+      }
+    });
+
+    // Sort ungrouped by order
+    ungrouped.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    // Build final list - groups first, then ungrouped
+    const result = [];
+    let flatIndex = 0;
+
+    // Add group items
+    const groupEntries = Object.entries(groups);
+    groupEntries.forEach(([groupId, members], groupIndex) => {
+      members.forEach((chat) => {
+        result.push({
+          kind: "chat",
+          ...chat,
+          isGrouped: true,
+          groupId,
+          flatIndex: flatIndex++,
+        });
+      });
+
+      // Minimal dashed separator between groups, and between grouped + ungrouped.
+      const hasMoreGroups = groupIndex < groupEntries.length - 1;
+      const hasUngrouped = ungrouped.length > 0;
+      if (hasMoreGroups || hasUngrouped) {
+        result.push({
+          kind: "separator",
+          id: hasMoreGroups ? `sep-after-${groupId}` : "sep-grouped-ungrouped",
+        });
+      }
+    });
+
+    // Add ungrouped items
+    ungrouped.forEach((chat) => {
+      result.push({
+        kind: "chat",
+        ...chat,
+        isGrouped: false,
+        flatIndex: flatIndex++,
+      });
+    });
+
+    return result;
+  }, [chatsList]);
+
+  const handleSelectChat = (chat) => {
+    if (activeGroupId && chat.groupId === activeGroupId && onFocusChatInGroup) {
+      onFocusChatInGroup(chat.id);
+      return;
+    }
+    onSwitchChat(chat.id);
+  };
 
   return (
     <Paper
@@ -143,53 +230,46 @@ const InfoPanel = ({
           </Box>
         </Box>
         <Collapse in={chatsExpanded}>
-          <List dense sx={{ py: 0.5, maxHeight: 200, overflow: "auto" }}>
-            {chatsList.map((chat) => (
-              <ListItem
-                key={chat.id}
-                disablePadding
-                secondaryAction={
-                  chatsList.length > 1 && (
-                    <IconButton
-                      edge="end"
-                      size="small"
-                      onClick={(e) => onDeleteChat(chat.id, e)}
+          <DndProvider backend={HTML5Backend}>
+            <List dense sx={{ py: 0.5, maxHeight: 200, overflow: "auto" }}>
+              {organizedChats.map((item) => {
+                if (item.kind === "separator") {
+                  return (
+                    <Divider
+                      key={item.id}
+                      component="li"
                       sx={{
-                        color: colors.text.dim,
-                        "&:hover": { color: colors.accent.delete },
-                        p: 0.5,
+                        borderColor: colors.border.primary,
+                        borderStyle: "dashed",
+                        opacity: 0.35,
+                        my: 0.5,
+                        mx: 1,
                       }}
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  )
+                    />
+                  );
                 }
-              >
-                <ListItemButton
-                  selected={chat.id === activeChatId}
-                  onClick={() => onSwitchChat(chat.id)}
-                  sx={components.listItemButton}
-                >
-                  <ListItemText
-                    primary={chat.name}
-                    className="ph-no-capture"
-                    primaryTypographyProps={{
-                      variant: "caption",
-                      sx: {
-                        color:
-                          chat.id === activeChatId
-                            ? colors.text.primary
-                            : colors.text.secondary,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      },
-                    }}
+
+                return (
+                  <DraggableChatItem
+                    key={item.id}
+                    chat={item}
+                    index={item.flatIndex}
+                    isActive={
+                      activeGroupId && item.groupId === activeGroupId
+                        ? item.id === focusedChatId
+                        : item.id === activeChatId
+                    }
+                    isGrouped={item.isGrouped}
+                    canDelete={chatsList.length > 1}
+                    onSwitchChat={() => handleSelectChat(item)}
+                    onDeleteChat={onDeleteChat}
+                    onMoveChat={onMoveChat}
+                    onMergeChats={onMergeChats}
                   />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
+                );
+              })}
+            </List>
+          </DndProvider>
         </Collapse>
       </Box>
 
