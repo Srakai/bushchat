@@ -22,7 +22,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import { colors, components } from "../styles/theme";
 
 const COLLAPSE_LINE_THRESHOLD = 16;
-const MAX_COLLAPSED_HEIGHT = 280; // Approximate height for 16 lines
+const MAX_COLLAPSED_HEIGHT = 500; // Approximate height for 16 lines
 
 const countLines = (text) => {
   if (!text) return 0;
@@ -165,7 +165,7 @@ const ChatNode = ({ id, data, selected }) => {
       onMouseLeave={() => setHovered(false)}
       sx={{
         minWidth: 350,
-        maxWidth: 500,
+        maxWidth: 700,
         backgroundColor: selected ? colors.bg.tertiary : colors.bg.secondary,
         border: isMergeSource
           ? `2px solid ${colors.accent.orange}`
