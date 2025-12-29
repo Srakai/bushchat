@@ -87,6 +87,11 @@ const TreeChatInner = () => {
     () => settings.panOnScroll !== false
   );
 
+  // Lock scroll on node focus state
+  const [lockScrollOnNodeFocus, setLockScrollOnNodeFocus] = useState(
+    () => settings.lockScrollOnNodeFocus || false
+  );
+
   // Merge state
   const [mergeMode, setMergeMode] = useState(null);
   const [pendingMerge, setPendingMerge] = useState(null);
@@ -337,6 +342,8 @@ const TreeChatInner = () => {
     saveSettings(newSettings, newSettings.saveApiKey);
     // Sync panOnScroll with settings
     setPanOnScroll(newSettings.panOnScroll !== false);
+    // Sync lockScrollOnNodeFocus with settings
+    setLockScrollOnNodeFocus(newSettings.lockScrollOnNodeFocus || false);
   }, []);
 
   // Share current chat
@@ -411,6 +418,7 @@ const TreeChatInner = () => {
         onRegenerateMerge: handleRegenerateMerge,
         onToggleCollapse: handleToggleCollapse,
         isMergeSource: mergeMode?.firstNodeId === node.id,
+        lockScrollOnNodeFocus,
       },
     }));
   }, [
@@ -422,6 +430,7 @@ const TreeChatInner = () => {
     handleRegenerateMerge,
     handleToggleCollapse,
     mergeMode,
+    lockScrollOnNodeFocus,
   ]);
 
   // Inject callbacks into all edges

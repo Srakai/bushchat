@@ -16,6 +16,7 @@ import SyncIcon from "@mui/icons-material/Sync";
 import { colors, components, typography } from "../styles/theme";
 import { defaultModels } from "../utils/constants";
 import PanScrollToggle from "./PanScrollToggle";
+import LockScrollToggle from "./LockScrollToggle";
 
 const SettingsModal = ({
   open,
@@ -198,6 +199,22 @@ const SettingsModal = ({
               {tempSettings.panOnScroll !== false
                 ? "Scroll to pan"
                 : "Scroll to zoom"}
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <LockScrollToggle
+              locked={tempSettings.lockScrollOnNodeFocus || false}
+              onToggle={() =>
+                setTempSettings({
+                  ...tempSettings,
+                  lockScrollOnNodeFocus: !tempSettings.lockScrollOnNodeFocus,
+                })
+              }
+            />
+            <Typography variant="body2" sx={typography.secondary}>
+              {tempSettings.lockScrollOnNodeFocus
+                ? "Lock scroll on node hover"
+                : "Scroll passes through nodes"}
             </Typography>
           </Box>
 

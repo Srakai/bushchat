@@ -144,13 +144,13 @@ export const setActiveChatId = (chatId) => {
 // Load settings from localStorage
 export const loadSettings = () => {
   if (typeof window === "undefined")
-    return { apiKey: "", apiUrl: "", saveApiKey: false, panOnScroll: true };
+    return { apiKey: "", apiUrl: "", saveApiKey: false, panOnScroll: true, lockScrollOnNodeFocus: false };
   try {
     const saved = localStorage.getItem(SETTINGS_KEY);
     const savedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
     const settings = saved
       ? JSON.parse(saved)
-      : { apiUrl: "", saveApiKey: false, panOnScroll: true };
+      : { apiUrl: "", saveApiKey: false, panOnScroll: true, lockScrollOnNodeFocus: false };
     // Load API key separately if it was saved
     if (savedApiKey && settings.saveApiKey) {
       settings.apiKey = savedApiKey;
@@ -161,11 +161,15 @@ export const loadSettings = () => {
     if (settings.panOnScroll === undefined) {
       settings.panOnScroll = true;
     }
+    // Default lockScrollOnNodeFocus to false if not set
+    if (settings.lockScrollOnNodeFocus === undefined) {
+      settings.lockScrollOnNodeFocus = false;
+    }
     return settings;
   } catch (e) {
     console.error("Failed to load settings:", e);
   }
-  return { apiKey: "", apiUrl: "", saveApiKey: false, panOnScroll: true };
+  return { apiKey: "", apiUrl: "", saveApiKey: false, panOnScroll: true, lockScrollOnNodeFocus: false };
 };
 
 // Save settings to localStorage
@@ -177,6 +181,7 @@ export const saveSettings = (settings, shouldSaveApiKey) => {
       apiUrl: settings.apiUrl,
       saveApiKey: shouldSaveApiKey,
       panOnScroll: settings.panOnScroll,
+      lockScrollOnNodeFocus: settings.lockScrollOnNodeFocus,
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsToSave));
 

@@ -1,5 +1,5 @@
 "use client";
-import React, { memo, useState } from "react";
+import React, { memo, useState, useRef, useCallback, useEffect } from "react";
 import { Handle, Position } from "reactflow";
 import {
   Box,
@@ -29,16 +29,54 @@ const countLines = (text) => {
   return text.split("\n").length;
 };
 
-const CollapsibleText = ({ text, collapsed, onToggleCollapse }) => {
+const CollapsibleText = ({
+  text,
+  collapsed,
+  onToggleCollapse,
+  lockScrollOnNodeFocus,
+}) => {
+  const scrollRef = useRef(null);
   const lineCount = countLines(text);
   const shouldShowCollapse = lineCount > COLLAPSE_LINE_THRESHOLD;
   // Use prop if provided, otherwise default based on line count
   const isCollapsed =
     collapsed !== undefined ? collapsed : lineCount > COLLAPSE_LINE_THRESHOLD;
 
+  // Use effect to add wheel event listener with passive: false to allow preventDefault
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !lockScrollOnNodeFocus) return;
+
+    const handleWheel = (e) => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const isScrollable = scrollHeight > clientHeight;
+
+      if (!isScrollable) return;
+
+      const atTop = scrollTop <= 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
+
+      // Check if we can scroll in the wheel direction
+      const canScrollUp = e.deltaY < 0 && !atTop;
+      const canScrollDown = e.deltaY > 0 && !atBottom;
+
+      if (canScrollUp || canScrollDown) {
+        // Stop the event from reaching ReactFlow
+        e.stopPropagation();
+        e.preventDefault();
+        // Manually scroll the element
+        el.scrollTop += e.deltaY;
+      }
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [lockScrollOnNodeFocus, isCollapsed]);
+
   return (
     <Box sx={{ position: "relative" }}>
       <Box
+        ref={scrollRef}
         sx={{
           ...(isCollapsed && shouldShowCollapse
             ? {
@@ -356,6 +394,7 @@ const ChatNode = ({ id, data, selected }) => {
               text={data.userMessage}
               collapsed={data.userMessageCollapsed}
               onToggleCollapse={handleToggleUserCollapse}
+              lockScrollOnNodeFocus={data.lockScrollOnNodeFocus}
             />
           )}
         </Box>
@@ -421,6 +460,7 @@ const ChatNode = ({ id, data, selected }) => {
               text={data.assistantMessage}
               collapsed={data.assistantMessageCollapsed}
               onToggleCollapse={handleToggleAssistantCollapse}
+              lockScrollOnNodeFocus={data.lockScrollOnNodeFocus}
             />
           </>
         ) : data.error ? (
