@@ -176,6 +176,20 @@ const SettingsModal = ({
             Your API key is stored locally in your browser and sent directly to
             OpenAI. We never see or store your key on any server.
           </Typography>
+          <Typography
+            component="a"
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="caption"
+            sx={{
+              color: colors.text.muted,
+              textDecoration: "underline",
+              "&:hover": { color: colors.accent.blue },
+            }}
+          >
+            Privacy Policy
+          </Typography>
           <Box
             sx={{
               display: "flex",
