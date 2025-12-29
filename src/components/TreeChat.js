@@ -67,6 +67,9 @@ const edgeTypes = {
 const DEFAULT_MERGE_PROMPT =
   "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
 
+// Horizontal offset between trees in grouped view
+const TREE_HORIZONTAL_OFFSET = 600;
+
 const TreeChatInner = () => {
   // Chat management state
   const [activeChatId, setActiveChatIdState] = useState(() =>
@@ -123,7 +126,7 @@ const TreeChatInner = () => {
         edges: state?.edges || initialEdges,
         selectedNodeId: state?.selectedNodeId || "root",
         nodeIdCounter: state?.nodeIdCounter || 1,
-        offset: { x: index * 600, y: 0 }, // Offset each tree horizontally
+        offset: { x: index * TREE_HORIZONTAL_OFFSET, y: 0 }, // Offset each tree horizontally
       };
     });
     return states;
@@ -338,7 +341,7 @@ const TreeChatInner = () => {
         
         groupMembers.forEach((member, index) => {
           const state = loadChatState(member.id);
-          const offset = { x: index * 600, y: 0 };
+          const offset = { x: index * TREE_HORIZONTAL_OFFSET, y: 0 };
           
           // Add prefixed and offset nodes
           const memberNodes = state?.nodes || initialNodes;
@@ -505,12 +508,12 @@ const TreeChatInner = () => {
       
       if (!draggedChat || !targetChat) return;
       
-      // Prevent nesting - if either chat is already in a group, we can't merge
+      // Prevent nesting - if either chat is already in a group, we can't create new groups
+      // This ensures flat group structure (no nested groups)
       if (draggedChat.groupId || targetChat.groupId) {
-        // Show notification - can't create nested groups
         setSnackbar({
           open: true,
-          message: "Cannot create nested groups",
+          message: "Cannot group chats that are already in a group",
           severity: "warning",
         });
         return;

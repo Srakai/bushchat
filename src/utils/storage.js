@@ -14,11 +14,11 @@ import {
 
 // Generate unique chat ID
 export const generateChatId = () =>
-  `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  `chat-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
 // Generate unique group ID
 export const generateGroupId = () =>
-  `group-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  `group-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
 // Load all chats list from localStorage
 export const loadChatsList = () => {

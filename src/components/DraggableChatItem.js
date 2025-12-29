@@ -249,7 +249,6 @@ const DraggableChatItem = ({
           <Box
             sx={{
               width: "40%",
-              backgroundColor: currentZone === "merge" ? "transparent" : "transparent",
               borderLeft: currentZone === "merge" ? `1px dashed ${colors.accent.orange}` : "none",
               borderRight: currentZone === "merge" ? `1px dashed ${colors.accent.orange}` : "none",
             }}
