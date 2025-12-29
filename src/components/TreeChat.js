@@ -929,6 +929,7 @@ const TreeChatInner = () => {
           updateNodeData(newNodeId, {
             assistantMessage: fullResponse,
             status: "complete",
+            model: selectedModel,
           });
         },
         (error) => {
@@ -1062,6 +1063,7 @@ const TreeChatInner = () => {
             updateNodeData(nodeId, {
               assistantMessage: fullResponse,
               status: "complete",
+              model: selectedModel,
             });
           },
           (error) => {
@@ -1295,6 +1297,8 @@ const TreeChatInner = () => {
           updateNodeData(nodeId, {
             assistantMessage: fullResponse,
             status: "complete",
+            model: selectedModel,
+            model: selectedModel,
           });
         },
         (error) => {
@@ -1514,6 +1518,7 @@ const TreeChatInner = () => {
           updateNodeData(newNodeId, {
             assistantMessage: fullResponse,
             status: "complete",
+            model: selectedModel,
           });
         },
         (error) => {

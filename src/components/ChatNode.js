@@ -12,6 +12,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import CheckIcon from "@mui/icons-material/Check";
@@ -20,31 +21,59 @@ import MergeIcon from "@mui/icons-material/CallMerge";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { colors, components } from "../styles/theme";
 
-const COLLAPSE_THRESHOLD = 500;
+const COLLAPSE_LINE_THRESHOLD = 16;
+const MAX_COLLAPSED_HEIGHT = 280; // Approximate height for 16 lines
+
+const countLines = (text) => {
+  if (!text) return 0;
+  return text.split("\n").length;
+};
 
 const CollapsibleText = ({ text, collapsed, onToggleCollapse }) => {
-  const shouldShowCollapse = text?.length > COLLAPSE_THRESHOLD;
-  // Use prop if provided, otherwise default based on text length
+  const lineCount = countLines(text);
+  const shouldShowCollapse = lineCount > COLLAPSE_LINE_THRESHOLD;
+  // Use prop if provided, otherwise default based on line count
   const isCollapsed =
-    collapsed !== undefined ? collapsed : text?.length > COLLAPSE_THRESHOLD;
-
-  const displayText = isCollapsed
-    ? text?.slice(0, COLLAPSE_THRESHOLD) + "..."
-    : text;
+    collapsed !== undefined ? collapsed : lineCount > COLLAPSE_LINE_THRESHOLD;
 
   return (
-    <>
-      <Typography
-        variant="body2"
-        className="ph-no-capture"
+    <Box sx={{ position: "relative" }}>
+      <Box
         sx={{
-          color: colors.text.primary,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
+          ...(isCollapsed && shouldShowCollapse
+            ? {
+                maxHeight: MAX_COLLAPSED_HEIGHT,
+                overflowY: "auto",
+                "&::-webkit-scrollbar": {
+                  width: 6,
+                },
+                "&::-webkit-scrollbar-track": {
+                  background: colors.bg.tertiary,
+                  borderRadius: 3,
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  background: colors.border.primary,
+                  borderRadius: 3,
+                  "&:hover": {
+                    background: colors.text.dim,
+                  },
+                },
+              }
+            : {}),
         }}
       >
-        {displayText}
-      </Typography>
+        <Typography
+          variant="body2"
+          className="ph-no-capture"
+          sx={{
+            color: colors.text.primary,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {text}
+        </Typography>
+      </Box>
       {shouldShowCollapse && (
         <Box
           onClick={(e) => {
@@ -65,7 +94,7 @@ const CollapsibleText = ({ text, collapsed, onToggleCollapse }) => {
             <>
               <ExpandMoreIcon sx={{ fontSize: 16 }} />
               <Typography variant="caption">
-                Show more ({text.length} chars)
+                Show more ({lineCount} lines)
               </Typography>
             </>
           ) : (
@@ -76,7 +105,7 @@ const CollapsibleText = ({ text, collapsed, onToggleCollapse }) => {
           )}
         </Box>
       )}
-    </>
+    </Box>
   );
 };
 
@@ -236,17 +265,44 @@ const ChatNode = ({ id, data, selected }) => {
             borderBottom: `1px solid ${colors.border.secondary}`,
           }}
         >
-          <Typography
-            variant="caption"
+          <Box
             sx={{
-              color: colors.accent.userLabel,
-              fontWeight: 500,
+              display: "flex",
+              alignItems: "center",
+              gap: 0.5,
               mb: 0.5,
-              display: "block",
             }}
           >
-            You
-          </Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: colors.accent.userLabel,
+                fontWeight: 500,
+              }}
+            >
+              You
+            </Typography>
+            <Tooltip title="Copy">
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (data.userMessage)
+                    navigator.clipboard.writeText(data.userMessage);
+                }}
+                sx={{
+                  opacity: 0.4,
+                  "&:hover": { opacity: 1 },
+                  color: colors.text.muted,
+                  width: 18,
+                  height: 18,
+                  p: 0,
+                }}
+              >
+                <ContentCopyIcon sx={{ fontSize: 11 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
           {isEditing ? (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
               <TextField
@@ -323,17 +379,44 @@ const ChatNode = ({ id, data, selected }) => {
           </Box>
         ) : data.assistantMessage ? (
           <>
-            <Typography
-              variant="caption"
+            <Box
               sx={{
-                color: colors.accent.green,
-                fontWeight: 500,
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
                 mb: 0.5,
-                display: "block",
               }}
             >
-              Assistant
-            </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: colors.accent.green,
+                  fontWeight: 500,
+                }}
+              >
+                {data.model || "Assistant"}
+              </Typography>
+              <Tooltip title="Copy">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (data.assistantMessage)
+                      navigator.clipboard.writeText(data.assistantMessage);
+                  }}
+                  sx={{
+                    opacity: 0.4,
+                    "&:hover": { opacity: 1 },
+                    color: colors.text.muted,
+                    width: 18,
+                    height: 18,
+                    p: 0,
+                  }}
+                >
+                  <ContentCopyIcon sx={{ fontSize: 11 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
             <CollapsibleText
               text={data.assistantMessage}
               collapsed={data.assistantMessageCollapsed}
