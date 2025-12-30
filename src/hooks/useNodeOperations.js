@@ -43,12 +43,12 @@ export const useNodeOperations = ({
   // Keep refs to latest nodes/edges for use in async callbacks
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
-  
+
   // Update refs when nodes/edges change
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
-  
+
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
@@ -191,7 +191,7 @@ export const useNodeOperations = ({
       return new Promise((resolve) => {
         const currentNodes = nodesRef.current;
         const currentEdges = edgesRef.current;
-        
+
         const node = currentNodes.find((n) => n.id === nodeId);
         if (!node || node.data?.isRoot) {
           resolve();
@@ -247,9 +247,13 @@ export const useNodeOperations = ({
           const branch2Messages = buildConversationFromPath(branch2);
 
           const mode1Label =
-            contextMode1 === CONTEXT_MODE.FULL ? "full context" : "single message";
+            contextMode1 === CONTEXT_MODE.FULL
+              ? "full context"
+              : "single message";
           const mode2Label =
-            contextMode2 === CONTEXT_MODE.FULL ? "full context" : "single message";
+            contextMode2 === CONTEXT_MODE.FULL
+              ? "full context"
+              : "single message";
 
           let mergedContext =
             "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
@@ -354,28 +358,28 @@ export const useNodeOperations = ({
     async (startNodeId) => {
       if (cascadeActiveRef.current) return;
       cascadeActiveRef.current = true;
-      
+
       try {
         // Clear tracking state
         regeneratingNodesRef.current.clear();
         pendingMergedNodesRef.current.clear();
-        
+
         // Queue for BFS traversal - process level by level
         let currentLevel = [startNodeId];
         const processedNodes = new Set([startNodeId]);
-        
+
         while (currentLevel.length > 0) {
           const nextLevel = [];
-          
+
           // Collect all children of current level nodes
           for (const nodeId of currentLevel) {
             const children = getImmediateChildren(nodeId, edgesRef.current);
             for (const childId of children) {
               if (processedNodes.has(childId)) continue;
-              
+
               const childNode = nodesRef.current.find((n) => n.id === childId);
               if (!childNode) continue;
-              
+
               // For merged nodes, check if all parents have been processed
               if (childNode.data?.isMergedNode && childNode.data.mergeParents) {
                 const allParentsProcessed = childNode.data.mergeParents.every(
@@ -384,41 +388,48 @@ export const useNodeOperations = ({
                 if (!allParentsProcessed) {
                   // Track this node for later
                   if (!pendingMergedNodesRef.current.has(childId)) {
-                    const unprocessedParents = childNode.data.mergeParents.filter(
-                      (pid) => !processedNodes.has(pid)
+                    const unprocessedParents =
+                      childNode.data.mergeParents.filter(
+                        (pid) => !processedNodes.has(pid)
+                      );
+                    pendingMergedNodesRef.current.set(
+                      childId,
+                      new Set(unprocessedParents)
                     );
-                    pendingMergedNodesRef.current.set(childId, new Set(unprocessedParents));
                   }
                   continue;
                 }
               }
-              
+
               nextLevel.push(childId);
             }
           }
-          
+
           // Also check if any pending merged nodes can now be processed
-          for (const [mergedNodeId, waitingFor] of pendingMergedNodesRef.current.entries()) {
+          for (const [
+            mergedNodeId,
+            waitingFor,
+          ] of pendingMergedNodesRef.current.entries()) {
             // Remove any parents that have been processed
             for (const parentId of processedNodes) {
               waitingFor.delete(parentId);
             }
-            
+
             if (waitingFor.size === 0 && !processedNodes.has(mergedNodeId)) {
               nextLevel.push(mergedNodeId);
               pendingMergedNodesRef.current.delete(mergedNodeId);
             }
           }
-          
+
           if (nextLevel.length === 0) break;
-          
+
           // Regenerate all nodes in this level (can be parallel or sequential)
           // Using sequential to avoid overwhelming the API
           for (const childId of nextLevel) {
             processedNodes.add(childId);
             await regenerateNodeAsync(childId);
           }
-          
+
           currentLevel = nextLevel;
         }
       } finally {
