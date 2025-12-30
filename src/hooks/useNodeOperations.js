@@ -1,7 +1,7 @@
 /**
  * Hook for node and edge operations - send messages, edit, delete, merge
  */
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useEffect } from "react";
 import { useReactFlow } from "reactflow";
 import { CONTEXT_MODE } from "../components/MergeEdge";
 import {
@@ -10,6 +10,11 @@ import {
   findLowestCommonAncestor,
   getDescendants,
 } from "../utils/treeUtils";
+
+// Helper to get immediate children of a node
+const getImmediateChildren = (nodeId, edges) => {
+  return edges.filter((e) => e.source === nodeId).map((e) => e.target);
+};
 
 // Default prompt for merge operations
 export const DEFAULT_MERGE_PROMPT =
@@ -34,6 +39,26 @@ export const useNodeOperations = ({
   setInputMessage,
 }) => {
   const { fitView } = useReactFlow();
+
+  // Keep refs to latest nodes/edges for use in async callbacks
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  
+  // Update refs when nodes/edges change
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+
+  // Track nodes that are being regenerated in a cascade
+  const regeneratingNodesRef = useRef(new Set());
+  // Track nodes waiting for parents to complete (for merged nodes)
+  const pendingMergedNodesRef = useRef(new Map()); // nodeId -> Set of parent nodeIds still regenerating
+  // Track if cascade is active to prevent duplicate triggers
+  const cascadeActiveRef = useRef(false);
 
   // Update node data
   const updateNodeData = useCallback(
@@ -160,7 +185,250 @@ export const useNodeOperations = ({
     [setSelectedNodeId]
   );
 
-  // Handle editing a node's user message (regenerates response)
+  // Internal function to regenerate a single node and return a promise
+  const regenerateNodeAsync = useCallback(
+    (nodeId) => {
+      return new Promise((resolve) => {
+        const currentNodes = nodesRef.current;
+        const currentEdges = edgesRef.current;
+        
+        const node = currentNodes.find((n) => n.id === nodeId);
+        if (!node || node.data?.isRoot) {
+          resolve();
+          return;
+        }
+
+        const userMessage = node.data.userMessage;
+        if (!userMessage) {
+          resolve();
+          return;
+        }
+
+        // Check if this is a merged node
+        if (node.data?.isMergedNode && node.data.mergeParents) {
+          const [firstNodeId, secondNodeId] = node.data.mergeParents;
+          const lcaId = node.data.lcaId;
+
+          const edge1 = currentEdges.find(
+            (e) => e.source === firstNodeId && e.target === nodeId
+          );
+          const edge2 = currentEdges.find(
+            (e) => e.source === secondNodeId && e.target === nodeId
+          );
+
+          const contextMode1 = edge1?.data?.contextMode || CONTEXT_MODE.SINGLE;
+          const contextMode2 = edge2?.data?.contextMode || CONTEXT_MODE.SINGLE;
+
+          const path1 = getPathToNode(firstNodeId, currentNodes, currentEdges);
+          const path2 = getPathToNode(secondNodeId, currentNodes, currentEdges);
+
+          const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
+          const lcaIndex2 = path2.findIndex((n) => n.id === lcaId);
+
+          let branch1, branch2;
+          if (contextMode1 === CONTEXT_MODE.FULL) {
+            branch1 = path1.slice(lcaIndex1 + 1);
+          } else {
+            const lastNode = path1[path1.length - 1];
+            branch1 = lastNode ? [lastNode] : [];
+          }
+
+          if (contextMode2 === CONTEXT_MODE.FULL) {
+            branch2 = path2.slice(lcaIndex2 + 1);
+          } else {
+            const lastNode = path2[path2.length - 1];
+            branch2 = lastNode ? [lastNode] : [];
+          }
+
+          const lcaPath = path1.slice(0, lcaIndex1 + 1);
+          const baseContext = buildConversationFromPath(lcaPath);
+
+          const branch1Messages = buildConversationFromPath(branch1);
+          const branch2Messages = buildConversationFromPath(branch2);
+
+          const mode1Label =
+            contextMode1 === CONTEXT_MODE.FULL ? "full context" : "single message";
+          const mode2Label =
+            contextMode2 === CONTEXT_MODE.FULL ? "full context" : "single message";
+
+          let mergedContext =
+            "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
+          mergedContext += `=== BRANCH A (${mode1Label}) ===\n`;
+          for (const msg of branch1Messages) {
+            mergedContext += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+          }
+          mergedContext += `=== BRANCH B (${mode2Label}) ===\n`;
+          for (const msg of branch2Messages) {
+            mergedContext += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+          }
+          mergedContext += "=== END BRANCHES ===\n\n";
+          mergedContext += userMessage;
+
+          updateNodeData(nodeId, {
+            assistantMessage: "",
+            status: "loading",
+            error: null,
+          });
+
+          const conversationMessages = [
+            ...baseContext,
+            { role: "user", content: mergedContext },
+          ];
+
+          sendChatRequest(
+            conversationMessages,
+            selectedModel,
+            (partialResponse) => {
+              updateNodeData(nodeId, {
+                assistantMessage: partialResponse,
+                status: "loading",
+              });
+            },
+            (fullResponse) => {
+              updateNodeData(nodeId, {
+                assistantMessage: fullResponse,
+                status: "complete",
+                model: selectedModel,
+              });
+              resolve();
+            },
+            (error) => {
+              console.error(error);
+              updateNodeData(nodeId, {
+                error: error.message,
+                status: "error",
+              });
+              resolve();
+            }
+          );
+          return;
+        }
+
+        // Regular node regeneration
+        updateNodeData(nodeId, {
+          assistantMessage: "",
+          status: "loading",
+          error: null,
+        });
+
+        const parentEdge = currentEdges.find((e) => e.target === nodeId);
+        const parentNodeId = parentEdge?.source || "root";
+
+        const path = getPathToNode(parentNodeId, currentNodes, currentEdges);
+        const conversationMessages = buildConversationFromPath(path);
+        conversationMessages.push({ role: "user", content: userMessage });
+
+        sendChatRequest(
+          conversationMessages,
+          selectedModel,
+          (partialResponse) => {
+            updateNodeData(nodeId, {
+              assistantMessage: partialResponse,
+              status: "loading",
+            });
+          },
+          (fullResponse) => {
+            updateNodeData(nodeId, {
+              assistantMessage: fullResponse,
+              status: "complete",
+              model: selectedModel,
+            });
+            resolve();
+          },
+          (error) => {
+            console.error(error);
+            updateNodeData(nodeId, {
+              error: error.message,
+              status: "error",
+            });
+            resolve();
+          }
+        );
+      });
+    },
+    [selectedModel, updateNodeData, sendChatRequest]
+  );
+
+  // Cascade regeneration to all descendants after a node is edited
+  const cascadeRegenerateDescendants = useCallback(
+    async (startNodeId) => {
+      if (cascadeActiveRef.current) return;
+      cascadeActiveRef.current = true;
+      
+      try {
+        // Clear tracking state
+        regeneratingNodesRef.current.clear();
+        pendingMergedNodesRef.current.clear();
+        
+        // Queue for BFS traversal - process level by level
+        let currentLevel = [startNodeId];
+        const processedNodes = new Set([startNodeId]);
+        
+        while (currentLevel.length > 0) {
+          const nextLevel = [];
+          
+          // Collect all children of current level nodes
+          for (const nodeId of currentLevel) {
+            const children = getImmediateChildren(nodeId, edgesRef.current);
+            for (const childId of children) {
+              if (processedNodes.has(childId)) continue;
+              
+              const childNode = nodesRef.current.find((n) => n.id === childId);
+              if (!childNode) continue;
+              
+              // For merged nodes, check if all parents have been processed
+              if (childNode.data?.isMergedNode && childNode.data.mergeParents) {
+                const allParentsProcessed = childNode.data.mergeParents.every(
+                  (pid) => processedNodes.has(pid)
+                );
+                if (!allParentsProcessed) {
+                  // Track this node for later
+                  if (!pendingMergedNodesRef.current.has(childId)) {
+                    const unprocessedParents = childNode.data.mergeParents.filter(
+                      (pid) => !processedNodes.has(pid)
+                    );
+                    pendingMergedNodesRef.current.set(childId, new Set(unprocessedParents));
+                  }
+                  continue;
+                }
+              }
+              
+              nextLevel.push(childId);
+            }
+          }
+          
+          // Also check if any pending merged nodes can now be processed
+          for (const [mergedNodeId, waitingFor] of pendingMergedNodesRef.current.entries()) {
+            // Remove any parents that have been processed
+            for (const parentId of processedNodes) {
+              waitingFor.delete(parentId);
+            }
+            
+            if (waitingFor.size === 0 && !processedNodes.has(mergedNodeId)) {
+              nextLevel.push(mergedNodeId);
+              pendingMergedNodesRef.current.delete(mergedNodeId);
+            }
+          }
+          
+          if (nextLevel.length === 0) break;
+          
+          // Regenerate all nodes in this level (can be parallel or sequential)
+          // Using sequential to avoid overwhelming the API
+          for (const childId of nextLevel) {
+            processedNodes.add(childId);
+            await regenerateNodeAsync(childId);
+          }
+          
+          currentLevel = nextLevel;
+        }
+      } finally {
+        cascadeActiveRef.current = false;
+      }
+    },
+    [regenerateNodeAsync]
+  );
+
+  // Handle editing a node's user message (regenerates response and cascades to children)
   const handleEditNode = useCallback(
     async (nodeId, newUserMessage) => {
       if (!newUserMessage.trim()) return;
@@ -168,6 +436,7 @@ export const useNodeOperations = ({
       if (isSharedView) commitSharedChat();
 
       const node = nodes.find((n) => n.id === nodeId);
+      if (!node) return;
 
       // Check if this is a merged node
       if (node?.data?.isMergedNode && node.data.mergeParents) {
@@ -254,12 +523,14 @@ export const useNodeOperations = ({
               status: "loading",
             });
           },
-          (fullResponse) => {
+          async (fullResponse) => {
             updateNodeData(nodeId, {
               assistantMessage: fullResponse,
               status: "complete",
               model: selectedModel,
             });
+            // Cascade to children after this node completes
+            cascadeRegenerateDescendants(nodeId);
           },
           (error) => {
             console.error(error);
@@ -296,11 +567,14 @@ export const useNodeOperations = ({
             status: "loading",
           });
         },
-        (fullResponse) => {
+        async (fullResponse) => {
           updateNodeData(nodeId, {
             assistantMessage: fullResponse,
             status: "complete",
+            model: selectedModel,
           });
+          // Cascade to children after this node completes
+          cascadeRegenerateDescendants(nodeId);
         },
         (error) => {
           console.error(error);
@@ -319,6 +593,7 @@ export const useNodeOperations = ({
       sendChatRequest,
       isSharedView,
       commitSharedChat,
+      cascadeRegenerateDescendants,
     ]
   );
 

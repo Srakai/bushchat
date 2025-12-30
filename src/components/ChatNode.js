@@ -236,7 +236,7 @@ const ChatNode = ({ id, data, selected }) => {
       )}
 
       {/* Action buttons on hover */}
-      {(hovered || selected) && !isRoot && !isLoading && !isEditing && (
+      {(hovered || selected) && !isRoot && !isEditing && (
         <Box
           sx={{
             position: "absolute",
@@ -247,7 +247,11 @@ const ChatNode = ({ id, data, selected }) => {
             zIndex: 10,
           }}
         >
-          <Tooltip title={isMergedNode ? "Edit merge prompt" : "Edit message"}>
+          <Tooltip
+            title={
+              isMergedNode ? "Edit merge prompt" : "Edit message (regenerate)"
+            }
+          >
             <IconButton
               size="small"
               onClick={handleStartEdit}
@@ -256,7 +260,7 @@ const ChatNode = ({ id, data, selected }) => {
               <EditIcon sx={{ fontSize: 14 }} />
             </IconButton>
           </Tooltip>
-          {isMergedNode && (
+          {isMergedNode && !isLoading && (
             <Tooltip title="Regenerate merge (respects edge context settings)">
               <IconButton
                 size="small"
@@ -273,15 +277,17 @@ const ChatNode = ({ id, data, selected }) => {
               </IconButton>
             </Tooltip>
           )}
-          <Tooltip title="Merge branches here">
-            <IconButton
-              size="small"
-              onClick={handleMerge}
-              sx={components.iconButton}
-            >
-              <MergeIcon sx={{ fontSize: 14 }} />
-            </IconButton>
-          </Tooltip>
+          {!isLoading && (
+            <Tooltip title="Merge branches here">
+              <IconButton
+                size="small"
+                onClick={handleMerge}
+                sx={components.iconButton}
+              >
+                <MergeIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title="Delete node">
             <IconButton
               size="small"
