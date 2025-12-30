@@ -40,14 +40,16 @@ const markdownOptions = {
       props: { sx: { color: colors.accent.blue } },
     },
     li: {
-      component: (props) => (
+      component: ({ children, ...props }) => (
         <Box component="li" sx={{ mt: 0.5 }}>
-          <Typography component="span" variant="body2" {...props} />
+          <Typography component="span" variant="body2" {...props}>
+            {children}
+          </Typography>
         </Box>
       ),
     },
     pre: {
-      component: (props) => (
+      component: ({ children, ...props }) => (
         <Box
           component="pre"
           sx={{
@@ -62,11 +64,13 @@ const markdownOptions = {
             },
           }}
           {...props}
-        />
+        >
+          {children}
+        </Box>
       ),
     },
     code: {
-      component: (props) => (
+      component: ({ children, ...props }) => (
         <Box
           component="code"
           sx={{
@@ -78,11 +82,13 @@ const markdownOptions = {
             fontFamily: "monospace",
           }}
           {...props}
-        />
+        >
+          {children}
+        </Box>
       ),
     },
     blockquote: {
-      component: (props) => (
+      component: ({ children, ...props }) => (
         <Box
           component="blockquote"
           sx={{
@@ -93,11 +99,13 @@ const markdownOptions = {
             my: 1,
           }}
           {...props}
-        />
+        >
+          {children}
+        </Box>
       ),
     },
     table: {
-      component: (props) => (
+      component: ({ children, ...props }) => (
         <Box
           component="table"
           sx={{
@@ -114,7 +122,9 @@ const markdownOptions = {
             },
           }}
           {...props}
-        />
+        >
+          {children}
+        </Box>
       ),
     },
     hr: {
