@@ -8,6 +8,7 @@ import {
   getPathToNode,
   buildConversationFromPath,
   findLowestCommonAncestor,
+  findLowestCommonAncestorMultiple,
   getDescendants,
 } from "../utils/treeUtils";
 
@@ -202,65 +203,60 @@ export const useNodeOperations = ({
 
         // Check if this is a merged node
         if (node.data?.isMergedNode && node.data.mergeParents) {
-          const [firstNodeId, secondNodeId] = node.data.mergeParents;
+          const mergeParents = node.data.mergeParents;
           const lcaId = node.data.lcaId;
 
-          const edge1 = currentEdges.find(
-            (e) => e.source === firstNodeId && e.target === nodeId
+          // Build branches for all parent nodes with their context modes
+          const branches = mergeParents.map((parentId) => {
+            const edge = currentEdges.find(
+              (e) => e.source === parentId && e.target === nodeId
+            );
+            const contextMode = edge?.data?.contextMode || CONTEXT_MODE.SINGLE;
+
+            const path = getPathToNode(parentId, currentNodes, currentEdges);
+            const lcaIndex = path.findIndex((n) => n.id === lcaId);
+
+            let branch;
+            if (contextMode === CONTEXT_MODE.FULL) {
+              branch = path.slice(lcaIndex + 1);
+            } else {
+              const lastNode = path[path.length - 1];
+              branch = lastNode ? [lastNode] : [];
+            }
+
+            return {
+              nodeId: parentId,
+              messages: buildConversationFromPath(branch),
+              contextMode,
+            };
+          });
+
+          // Get base context from LCA
+          const path1 = getPathToNode(
+            mergeParents[0],
+            currentNodes,
+            currentEdges
           );
-          const edge2 = currentEdges.find(
-            (e) => e.source === secondNodeId && e.target === nodeId
-          );
-
-          const contextMode1 = edge1?.data?.contextMode || CONTEXT_MODE.SINGLE;
-          const contextMode2 = edge2?.data?.contextMode || CONTEXT_MODE.SINGLE;
-
-          const path1 = getPathToNode(firstNodeId, currentNodes, currentEdges);
-          const path2 = getPathToNode(secondNodeId, currentNodes, currentEdges);
-
           const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
-          const lcaIndex2 = path2.findIndex((n) => n.id === lcaId);
-
-          let branch1, branch2;
-          if (contextMode1 === CONTEXT_MODE.FULL) {
-            branch1 = path1.slice(lcaIndex1 + 1);
-          } else {
-            const lastNode = path1[path1.length - 1];
-            branch1 = lastNode ? [lastNode] : [];
-          }
-
-          if (contextMode2 === CONTEXT_MODE.FULL) {
-            branch2 = path2.slice(lcaIndex2 + 1);
-          } else {
-            const lastNode = path2[path2.length - 1];
-            branch2 = lastNode ? [lastNode] : [];
-          }
-
           const lcaPath = path1.slice(0, lcaIndex1 + 1);
           const baseContext = buildConversationFromPath(lcaPath);
 
-          const branch1Messages = buildConversationFromPath(branch1);
-          const branch2Messages = buildConversationFromPath(branch2);
+          // Build merged context with all branches
+          const branchCount = branches.length;
+          let mergedContext = `You are continuing a conversation that has branched into ${branchCount} paths. Here are all branches:\n\n`;
 
-          const mode1Label =
-            contextMode1 === CONTEXT_MODE.FULL
-              ? "full context"
-              : "single message";
-          const mode2Label =
-            contextMode2 === CONTEXT_MODE.FULL
-              ? "full context"
-              : "single message";
+          branches.forEach((branch, index) => {
+            const branchLabel = String.fromCharCode(65 + index); // A, B, C, D, ...
+            const modeLabel =
+              branch.contextMode === CONTEXT_MODE.FULL
+                ? "full context"
+                : "single message";
+            mergedContext += `=== BRANCH ${branchLabel} (${modeLabel}) ===\n`;
+            for (const msg of branch.messages) {
+              mergedContext += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+            }
+          });
 
-          let mergedContext =
-            "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
-          mergedContext += `=== BRANCH A (${mode1Label}) ===\n`;
-          for (const msg of branch1Messages) {
-            mergedContext += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
-          }
-          mergedContext += `=== BRANCH B (${mode2Label}) ===\n`;
-          for (const msg of branch2Messages) {
-            mergedContext += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
-          }
           mergedContext += "=== END BRANCHES ===\n\n";
           mergedContext += userMessage;
 
@@ -423,65 +419,56 @@ export const useNodeOperations = ({
 
       // Check if this is a merged node
       if (node?.data?.isMergedNode && node.data.mergeParents) {
-        const [firstNodeId, secondNodeId] = node.data.mergeParents;
+        const mergeParents = node.data.mergeParents;
         const lcaId = node.data.lcaId;
 
-        const edge1 = edges.find(
-          (e) => e.source === firstNodeId && e.target === nodeId
-        );
-        const edge2 = edges.find(
-          (e) => e.source === secondNodeId && e.target === nodeId
-        );
+        // Build branches for all parent nodes with their context modes
+        const branches = mergeParents.map((parentId) => {
+          const edge = edges.find(
+            (e) => e.source === parentId && e.target === nodeId
+          );
+          const contextMode = edge?.data?.contextMode || CONTEXT_MODE.SINGLE;
 
-        const contextMode1 = edge1?.data?.contextMode || CONTEXT_MODE.SINGLE;
-        const contextMode2 = edge2?.data?.contextMode || CONTEXT_MODE.SINGLE;
+          const path = getPathToNode(parentId, nodes, edges);
+          const lcaIndex = path.findIndex((n) => n.id === lcaId);
 
-        const path1 = getPathToNode(firstNodeId, nodes, edges);
-        const path2 = getPathToNode(secondNodeId, nodes, edges);
+          let branch;
+          if (contextMode === CONTEXT_MODE.FULL) {
+            branch = path.slice(lcaIndex + 1);
+          } else {
+            const lastNode = path[path.length - 1];
+            branch = lastNode ? [lastNode] : [];
+          }
 
+          return {
+            nodeId: parentId,
+            messages: buildConversationFromPath(branch),
+            contextMode,
+          };
+        });
+
+        // Get base context from LCA
+        const path1 = getPathToNode(mergeParents[0], nodes, edges);
         const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
-        const lcaIndex2 = path2.findIndex((n) => n.id === lcaId);
-
-        let branch1, branch2;
-        if (contextMode1 === CONTEXT_MODE.FULL) {
-          branch1 = path1.slice(lcaIndex1 + 1);
-        } else {
-          const lastNode = path1[path1.length - 1];
-          branch1 = lastNode ? [lastNode] : [];
-        }
-
-        if (contextMode2 === CONTEXT_MODE.FULL) {
-          branch2 = path2.slice(lcaIndex2 + 1);
-        } else {
-          const lastNode = path2[path2.length - 1];
-          branch2 = lastNode ? [lastNode] : [];
-        }
-
         const lcaPath = path1.slice(0, lcaIndex1 + 1);
         const baseContext = buildConversationFromPath(lcaPath);
 
-        const branch1Messages = buildConversationFromPath(branch1);
-        const branch2Messages = buildConversationFromPath(branch2);
+        // Build merged context with all branches
+        const branchCount = branches.length;
+        let mergedContext = `You are continuing a conversation that has branched into ${branchCount} paths. Here are all branches:\n\n`;
 
-        const mode1Label =
-          contextMode1 === CONTEXT_MODE.FULL
-            ? "full context"
-            : "single message";
-        const mode2Label =
-          contextMode2 === CONTEXT_MODE.FULL
-            ? "full context"
-            : "single message";
+        branches.forEach((branch, index) => {
+          const branchLabel = String.fromCharCode(65 + index); // A, B, C, D, ...
+          const modeLabel =
+            branch.contextMode === CONTEXT_MODE.FULL
+              ? "full context"
+              : "single message";
+          mergedContext += `=== BRANCH ${branchLabel} (${modeLabel}) ===\n`;
+          for (const msg of branch.messages) {
+            mergedContext += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+          }
+        });
 
-        let mergedContext =
-          "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
-        mergedContext += `=== BRANCH A (${mode1Label}) ===\n`;
-        for (const msg of branch1Messages) {
-          mergedContext += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
-        }
-        mergedContext += `=== BRANCH B (${mode2Label}) ===\n`;
-        for (const msg of branch2Messages) {
-          mergedContext += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
-        }
         mergedContext += "=== END BRANCHES ===\n\n";
         mergedContext += newUserMessage;
 
@@ -671,64 +658,59 @@ export const useNodeOperations = ({
       const node = nodes.find((n) => n.id === nodeId);
       if (!node?.data?.isMergedNode || !node.data.mergeParents) return;
 
-      const [firstNodeId, secondNodeId] = node.data.mergeParents;
+      const mergeParents = node.data.mergeParents;
       const lcaId = node.data.lcaId;
 
-      const edge1 = edges.find(
-        (e) => e.source === firstNodeId && e.target === nodeId
-      );
-      const edge2 = edges.find(
-        (e) => e.source === secondNodeId && e.target === nodeId
-      );
+      // Build branches for all parent nodes with their context modes
+      const branches = mergeParents.map((parentId, index) => {
+        const edge = edges.find(
+          (e) => e.source === parentId && e.target === nodeId
+        );
+        const contextMode = edge?.data?.contextMode || CONTEXT_MODE.FULL;
 
-      const contextMode1 = edge1?.data?.contextMode || CONTEXT_MODE.FULL;
-      const contextMode2 = edge2?.data?.contextMode || CONTEXT_MODE.FULL;
+        const path = getPathToNode(parentId, nodes, edges);
+        const lcaIndex = path.findIndex((n) => n.id === lcaId);
 
-      const path1 = getPathToNode(firstNodeId, nodes, edges);
-      const path2 = getPathToNode(secondNodeId, nodes, edges);
+        let branch;
+        if (contextMode === CONTEXT_MODE.FULL) {
+          branch = path.slice(lcaIndex + 1);
+        } else {
+          const lastNode = path[path.length - 1];
+          branch = lastNode ? [lastNode] : [];
+        }
 
+        return {
+          nodeId: parentId,
+          messages: buildConversationFromPath(branch),
+          contextMode,
+        };
+      });
+
+      // Get base context from LCA
+      const path1 = getPathToNode(mergeParents[0], nodes, edges);
       const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
-      const lcaIndex2 = path2.findIndex((n) => n.id === lcaId);
-
-      let branch1, branch2;
-      if (contextMode1 === CONTEXT_MODE.FULL) {
-        branch1 = path1.slice(lcaIndex1 + 1);
-      } else {
-        const lastNode = path1[path1.length - 1];
-        branch1 = lastNode ? [lastNode] : [];
-      }
-
-      if (contextMode2 === CONTEXT_MODE.FULL) {
-        branch2 = path2.slice(lcaIndex2 + 1);
-      } else {
-        const lastNode = path2[path2.length - 1];
-        branch2 = lastNode ? [lastNode] : [];
-      }
-
       const lcaPath = path1.slice(0, lcaIndex1 + 1);
       const baseContext = buildConversationFromPath(lcaPath);
 
-      const branch1Messages = buildConversationFromPath(branch1);
-      const branch2Messages = buildConversationFromPath(branch2);
+      // Build merged prompt with all branches
+      const branchCount = branches.length;
+      let mergedPrompt = `You are continuing a conversation that has branched into ${branchCount} paths. Here are all branches:\n\n`;
 
-      const mode1Label =
-        contextMode1 === CONTEXT_MODE.FULL ? "full context" : "single message";
-      const mode2Label =
-        contextMode2 === CONTEXT_MODE.FULL ? "full context" : "single message";
+      branches.forEach((branch, index) => {
+        const branchLabel = String.fromCharCode(65 + index); // A, B, C, D, ...
+        const modeLabel =
+          branch.contextMode === CONTEXT_MODE.FULL
+            ? "full context"
+            : "single message";
+        mergedPrompt += `=== BRANCH ${branchLabel} (${modeLabel}) ===\n`;
+        for (const msg of branch.messages) {
+          mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+        }
+      });
 
-      let mergedPrompt =
-        "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
-      mergedPrompt += `=== BRANCH A (${mode1Label}) ===\n`;
-      for (const msg of branch1Messages) {
-        mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
-      }
-      mergedPrompt += `=== BRANCH B (${mode2Label}) ===\n`;
-      for (const msg of branch2Messages) {
-        mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
-      }
       mergedPrompt += "=== END BRANCHES ===\n\n";
       mergedPrompt +=
-        "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
+        "Please synthesize insights from all branches and continue the conversation, acknowledging key points from each path.";
 
       updateNodeData(nodeId, {
         assistantMessage: "",
@@ -769,59 +751,71 @@ export const useNodeOperations = ({
     [nodes, edges, selectedModel, updateNodeData, sendChatRequest]
   );
 
-  // Handle merge - first click selects first node, second click prepares merge
+  // Handle merge - clicks add/remove nodes from selection, double-click or confirm triggers merge
   const handleMergeNode = useCallback(
-    (nodeId) => {
+    (nodeId, isDoubleClick = false) => {
       if (nodeId === "root" || nodeId.endsWith(":root")) return;
 
+      // If no merge mode, start it with this node
       if (!mergeMode) {
-        setMergeMode({ firstNodeId: nodeId });
+        setMergeMode({ selectedNodeIds: [nodeId] });
         return;
       }
 
-      if (mergeMode.firstNodeId === nodeId) {
+      const selectedNodeIds = mergeMode.selectedNodeIds || [];
+      const isSelected = selectedNodeIds.includes(nodeId);
+
+      // If double-clicking or we have 2+ nodes and clicking a selected one, trigger merge
+      if (isDoubleClick && selectedNodeIds.length >= 2) {
+        // Proceed to pending merge
+        if (isSharedView) commitSharedChat();
+
+        const lcaId = findLowestCommonAncestorMultiple(
+          selectedNodeIds,
+          nodes,
+          edges
+        );
+
+        // Build branches for all selected nodes
+        const branches = selectedNodeIds.map((id) => {
+          const path = getPathToNode(id, nodes, edges);
+          const lcaIndex = path.findIndex((n) => n.id === lcaId);
+          const branch = path.slice(lcaIndex + 1);
+          return {
+            nodeId: id,
+            messages: buildConversationFromPath(branch),
+          };
+        });
+
+        setPendingMerge({
+          selectedNodeIds,
+          lcaId,
+          branches,
+        });
+
+        setInputMessage(DEFAULT_MERGE_PROMPT);
         setMergeMode(null);
+
+        setTimeout(() => {
+          document.getElementById("message-input")?.focus();
+        }, 100);
         return;
       }
 
-      if (isSharedView) commitSharedChat();
-
-      const firstNodeId = mergeMode.firstNodeId;
-      const secondNodeId = nodeId;
-
-      const lcaId = findLowestCommonAncestor(
-        firstNodeId,
-        secondNodeId,
-        nodes,
-        edges
-      );
-
-      const path1 = getPathToNode(firstNodeId, nodes, edges);
-      const path2 = getPathToNode(secondNodeId, nodes, edges);
-
-      const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
-      const lcaIndex2 = path2.findIndex((n) => n.id === lcaId);
-
-      const branch1 = path1.slice(lcaIndex1 + 1);
-      const branch2 = path2.slice(lcaIndex2 + 1);
-
-      const branch1Messages = buildConversationFromPath(branch1);
-      const branch2Messages = buildConversationFromPath(branch2);
-
-      setPendingMerge({
-        firstNodeId,
-        secondNodeId,
-        lcaId,
-        branch1Messages,
-        branch2Messages,
-      });
-
-      setInputMessage(DEFAULT_MERGE_PROMPT);
-      setMergeMode(null);
-
-      setTimeout(() => {
-        document.getElementById("message-input")?.focus();
-      }, 100);
+      // Toggle node selection
+      if (isSelected) {
+        // Remove from selection
+        const newSelection = selectedNodeIds.filter((id) => id !== nodeId);
+        if (newSelection.length === 0) {
+          // Cancel merge mode if no nodes left
+          setMergeMode(null);
+        } else {
+          setMergeMode({ selectedNodeIds: newSelection });
+        }
+      } else {
+        // Add to selection
+        setMergeMode({ selectedNodeIds: [...selectedNodeIds, nodeId] });
+      }
     },
     [
       mergeMode,
@@ -840,42 +834,46 @@ export const useNodeOperations = ({
     async (userPrompt) => {
       if (!pendingMerge) return;
 
-      const {
-        firstNodeId,
-        secondNodeId,
-        lcaId,
-        branch1Messages,
-        branch2Messages,
-      } = pendingMerge;
+      const { selectedNodeIds, lcaId, branches } = pendingMerge;
 
-      const path1 = getPathToNode(firstNodeId, nodes, edges);
+      // Get the base context from LCA path
+      const path1 = getPathToNode(selectedNodeIds[0], nodes, edges);
       const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
       const lcaPath = path1.slice(0, lcaIndex1 + 1);
       const baseContext = buildConversationFromPath(lcaPath);
 
-      let mergedPrompt =
-        "You are continuing a conversation that has branched into two paths. Here are both branches:\n\n";
-      mergedPrompt += "=== BRANCH A ===\n";
-      for (const msg of branch1Messages) {
-        mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
-      }
-      mergedPrompt += "=== BRANCH B ===\n";
-      for (const msg of branch2Messages) {
-        mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
-      }
+      // Build merged prompt with all branches
+      const branchCount = branches.length;
+      let mergedPrompt = `You are continuing a conversation that has branched into ${branchCount} paths. Here are all branches:\n\n`;
+
+      branches.forEach((branch, index) => {
+        const branchLabel = String.fromCharCode(65 + index); // A, B, C, D, ...
+        mergedPrompt += `=== BRANCH ${branchLabel} ===\n`;
+        for (const msg of branch.messages) {
+          mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+        }
+      });
+
       mergedPrompt += "=== END BRANCHES ===\n\n";
       mergedPrompt += userPrompt;
 
       const newNodeId = `node-${nodeIdCounterRef.current++}`;
-      const node1 = nodes.find((n) => n.id === firstNodeId);
-      const node2 = nodes.find((n) => n.id === secondNodeId);
+
+      // Calculate position - average x, max y + offset
+      const parentNodes = selectedNodeIds.map((id) =>
+        nodes.find((n) => n.id === id)
+      );
+      const avgX =
+        parentNodes.reduce((sum, n) => sum + n.position.x, 0) /
+        parentNodes.length;
+      const maxY = Math.max(...parentNodes.map((n) => n.position.y));
 
       const newNode = {
         id: newNodeId,
         type: "chatNode",
         position: {
-          x: (node1.position.x + node2.position.x) / 2,
-          y: Math.max(node1.position.y, node2.position.y) + 200,
+          x: avgX,
+          y: maxY + 200,
         },
         data: {
           userMessage: userPrompt,
@@ -883,40 +881,26 @@ export const useNodeOperations = ({
           status: "loading",
           isRoot: false,
           isMergedNode: true,
-          mergeParents: [firstNodeId, secondNodeId],
+          mergeParents: selectedNodeIds,
           lcaId: lcaId,
         },
       };
 
-      const edge1Id = `edge-${firstNodeId}-${newNodeId}`;
-      const edge2Id = `edge-${secondNodeId}-${newNodeId}`;
+      // Create edges from all parent nodes
+      const newEdges = selectedNodeIds.map((parentId) => ({
+        id: `edge-${parentId}-${newNodeId}`,
+        source: parentId,
+        target: newNodeId,
+        type: "mergeEdge",
+        style: { stroke: "#ff9800", strokeWidth: 2 },
+        data: {
+          isMergeEdge: true,
+          contextMode: CONTEXT_MODE.SINGLE,
+        },
+      }));
 
       setNodes((nds) => [...nds, newNode]);
-      setEdges((eds) => [
-        ...eds,
-        {
-          id: edge1Id,
-          source: firstNodeId,
-          target: newNodeId,
-          type: "mergeEdge",
-          style: { stroke: "#ff9800", strokeWidth: 2 },
-          data: {
-            isMergeEdge: true,
-            contextMode: CONTEXT_MODE.SINGLE,
-          },
-        },
-        {
-          id: edge2Id,
-          source: secondNodeId,
-          target: newNodeId,
-          type: "mergeEdge",
-          style: { stroke: "#ff9800", strokeWidth: 2 },
-          data: {
-            isMergeEdge: true,
-            contextMode: CONTEXT_MODE.SINGLE,
-          },
-        },
-      ]);
+      setEdges((eds) => [...eds, ...newEdges]);
 
       setSelectedNodeId(newNodeId);
       setPendingMerge(null);

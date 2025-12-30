@@ -287,13 +287,16 @@ const InfoPanel = ({
                 fontWeight: 500,
               }}
             >
-              🔀 Merge Mode Active
+              🔀 Merge Mode ({mergeMode.selectedNodeIds?.length || 0} nodes
+              selected)
             </Typography>
             <Typography
               variant="caption"
               sx={{ ...typography.muted, display: "block", mt: 0.5 }}
             >
-              Click another node to merge, or click the same node to cancel
+              {(mergeMode.selectedNodeIds?.length || 0) < 2
+                ? "Click more nodes to add to selection"
+                : "Double-click merge button to confirm, or add more nodes"}
             </Typography>
             <Button
               size="small"

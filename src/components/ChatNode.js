@@ -189,13 +189,21 @@ const ChatNode = ({ id, data, selected }) => {
 
   const handleMerge = (e) => {
     e.stopPropagation();
-    data.onMergeNode?.(id);
+    data.onMergeNode?.(id, false);
+  };
+
+  const handleMergeDoubleClick = (e) => {
+    e.stopPropagation();
+    data.onMergeNode?.(id, true);
   };
 
   const handleRegenerateMerge = (e) => {
     e.stopPropagation();
     data.onRegenerateMerge?.(id);
   };
+
+  // Get merge selection count for tooltip
+  const mergeSelectionCount = data.mergeSelectionCount || 0;
 
   return (
     <Box
@@ -278,11 +286,28 @@ const ChatNode = ({ id, data, selected }) => {
             </Tooltip>
           )}
           {!isLoading && (
-            <Tooltip title="Merge branches here">
+            <Tooltip
+              title={
+                isMergeSource && mergeSelectionCount >= 2
+                  ? `${mergeSelectionCount} nodes selected - Double-click to merge`
+                  : isMergeSource
+                  ? "Click to deselect, or select more nodes"
+                  : mergeSelectionCount > 0
+                  ? "Click to add to merge selection"
+                  : "Click to start merge selection"
+              }
+            >
               <IconButton
                 size="small"
                 onClick={handleMerge}
-                sx={components.iconButton}
+                onDoubleClick={handleMergeDoubleClick}
+                sx={{
+                  ...components.iconButton,
+                  ...(isMergeSource && {
+                    backgroundColor: colors.accent.orange,
+                    "&:hover": { backgroundColor: colors.accent.orangeHover },
+                  }),
+                }}
               >
                 <MergeIcon sx={{ fontSize: 14 }} />
               </IconButton>

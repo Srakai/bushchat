@@ -55,6 +55,30 @@ export const findLowestCommonAncestor = (nodeId1, nodeId2, nodes, edges) => {
   return "root";
 };
 
+// Find the lowest common ancestor of multiple nodes
+export const findLowestCommonAncestorMultiple = (nodeIds, nodes, edges) => {
+  if (nodeIds.length === 0) return "root";
+  if (nodeIds.length === 1) return nodeIds[0];
+
+  // Get all paths
+  const paths = nodeIds.map((id) => getPathToNode(id, nodes, edges));
+  const pathIdSets = paths.map((path) => new Set(path.map((n) => n.id)));
+
+  // Start from the first path and find ancestors common to all paths
+  const firstPath = paths[0];
+
+  // Walk from the deepest node towards root, find first node that's in all paths
+  for (let i = firstPath.length - 1; i >= 0; i--) {
+    const candidateId = firstPath[i].id;
+    const isInAllPaths = pathIdSets.every((set) => set.has(candidateId));
+    if (isInAllPaths) {
+      return candidateId;
+    }
+  }
+
+  return "root";
+};
+
 // Get all descendants of a node
 export const getDescendants = (nodeId, nodes, edges) => {
   const descendants = [];

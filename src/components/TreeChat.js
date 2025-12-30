@@ -409,6 +409,7 @@ const TreeChatInner = () => {
 
   // Inject callbacks into all nodes
   const nodesWithCallbacks = useMemo(() => {
+    const selectedNodeIds = mergeMode?.selectedNodeIds || [];
     return nodes.map((node) => ({
       ...node,
       data: {
@@ -419,7 +420,8 @@ const TreeChatInner = () => {
         onMergeNode: handleMergeNode,
         onRegenerateMerge: handleRegenerateMerge,
         onToggleCollapse: handleToggleCollapse,
-        isMergeSource: mergeMode?.firstNodeId === node.id,
+        isMergeSource: selectedNodeIds.includes(node.id),
+        mergeSelectionCount: selectedNodeIds.length,
         lockScrollOnNodeFocus,
       },
     }));
