@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import ReactFlow, {
   Controls,
+  ControlButton,
   Background,
   useNodesState,
   useEdgesState,
@@ -27,6 +28,7 @@ import InfoPanel from "./InfoPanel";
 import InputPanel from "./InputPanel";
 import FocusModeOverlay from "./FocusModeOverlay";
 import PanScrollToggle from "./PanScrollToggle";
+import LockScrollToggle from "./LockScrollToggle";
 
 // Hooks
 import { useChatApi } from "../hooks/useChatApi";
@@ -502,12 +504,22 @@ const TreeChatInner = () => {
             border: `1px solid ${colors.border.primary}`,
           }}
           className="custom-controls"
+          showInteractive={false}
         >
-          <PanScrollToggle
-            panOnScroll={panOnScroll}
-            onToggle={() => setPanOnScroll((prev) => !prev)}
-            size="small"
-          />
+          <ControlButton>
+            <PanScrollToggle
+              panOnScroll={panOnScroll}
+              onToggle={() => setPanOnScroll((prev) => !prev)}
+              size="small"
+            />
+          </ControlButton>
+          <ControlButton>
+            <LockScrollToggle
+              locked={lockScrollOnNodeFocus}
+              onToggle={() => setLockScrollOnNodeFocus((prev) => !prev)}
+              size="small"
+            />
+          </ControlButton>
         </Controls>
 
         {/* Input Panel */}

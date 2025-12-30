@@ -20,8 +20,11 @@ const PanScrollToggle = ({ panOnScroll, onToggle, size = "medium" }) => {
           : "Scroll to zoom (click to switch to pan)"
       }
       sx={{
-        color: colors.text.primary,
-        "&:hover": { backgroundColor: "rgba(255, 255, 255, 0.1)" },
+        color: colors.text.muted,
+        "&:hover": {
+          backgroundColor: "rgba(255, 255, 255, 0.1)",
+          color: colors.text.primary,
+        },
       }}
     >
       {panOnScroll ? (

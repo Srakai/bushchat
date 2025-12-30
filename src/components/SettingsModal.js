@@ -135,7 +135,13 @@ const SettingsModal = ({
               </Typography>
             }
           />
-          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+          <Typography variant="caption" sx={typography.dim}>
+            Your API key is stored locally in your browser and sent directly to
+            the provider. We never see or store your key on any server.
+          </Typography>
+          <Box
+            sx={{ display: "flex", gap: 1, alignItems: "flex-start", mt: 2 }}
+          >
             <TextField
               label="OpenAI Compatible URL"
               className="ph-no-capture"
@@ -156,8 +162,11 @@ const SettingsModal = ({
               disabled={isLoadingModels}
               sx={{
                 mt: 0.5,
-                color: colors.accent.blue,
-                "&:hover": { backgroundColor: "rgba(74, 158, 255, 0.1)" },
+                color: colors.text.muted,
+                "&:hover": {
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                  color: colors.text.primary,
+                },
                 "&.Mui-disabled": { color: colors.text.dim },
                 animation: isLoadingModels ? "spin 1s linear infinite" : "none",
                 "@keyframes spin": {
@@ -175,10 +184,6 @@ const SettingsModal = ({
               ✓ Loaded {modelsList.length} models from provider
             </Typography>
           )}
-          <Typography variant="caption" sx={typography.dim}>
-            Your API key is stored locally in your browser and sent directly to
-            OpenAI. We never see or store your key on any server.
-          </Typography>
 
           <Divider sx={{ borderColor: colors.border.secondary, my: 1 }} />
 
@@ -197,8 +202,8 @@ const SettingsModal = ({
             />
             <Typography variant="body2" sx={typography.secondary}>
               {tempSettings.panOnScroll !== false
-                ? "Scroll to pan"
-                : "Scroll to zoom"}
+                ? "Scroll set to pan"
+                : "Scroll set to zoom"}
             </Typography>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -217,6 +222,8 @@ const SettingsModal = ({
                 : "Scroll passes through nodes"}
             </Typography>
           </Box>
+
+          <Divider sx={{ borderColor: colors.border.secondary, my: 1 }} />
 
           <Typography
             component="a"
@@ -240,14 +247,10 @@ const SettingsModal = ({
               mt: 1,
             }}
           >
-            <Button onClick={onClose} sx={typography.muted}>
+            <Button onClick={onClose} sx={components.buttonSecondary}>
               Cancel
             </Button>
-            <Button
-              onClick={handleSave}
-              variant="contained"
-              sx={components.buttonPrimary}
-            >
+            <Button onClick={handleSave} sx={components.buttonSecondary}>
               Save
             </Button>
           </Box>

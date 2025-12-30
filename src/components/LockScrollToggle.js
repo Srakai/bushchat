@@ -3,8 +3,8 @@
  */
 import React from "react";
 import { IconButton } from "@mui/material";
-import LockIcon from "@mui/icons-material/Lock";
-import LockOpenIcon from "@mui/icons-material/LockOpen";
+import ExpandIcon from "@mui/icons-material/Expand";
+import WebAssetOffIcon from "@mui/icons-material/WebAssetOff";
 import { colors } from "../styles/theme";
 
 const LockScrollToggle = ({ locked, onToggle, size = "medium" }) => {
@@ -20,14 +20,17 @@ const LockScrollToggle = ({ locked, onToggle, size = "medium" }) => {
           : "Canvas scroll unlocked (click to lock on node hover)"
       }
       sx={{
-        color: colors.text.primary,
-        "&:hover": { backgroundColor: "rgba(255, 255, 255, 0.1)" },
+        color: colors.text.muted,
+        "&:hover": {
+          backgroundColor: "rgba(255, 255, 255, 0.1)",
+          color: colors.text.primary,
+        },
       }}
     >
       {locked ? (
-        <LockIcon sx={{ fontSize: iconSize }} />
+        <ExpandIcon sx={{ fontSize: iconSize }} />
       ) : (
-        <LockOpenIcon sx={{ fontSize: iconSize }} />
+        <WebAssetOffIcon sx={{ fontSize: iconSize }} />
       )}
     </IconButton>
   );
