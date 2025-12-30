@@ -1,8 +1,13 @@
 "use client";
 import React from "react";
+import dynamic from "next/dynamic";
 import { Box } from "@mui/material";
-import Markdown from "markdown-to-jsx";
 import { colors } from "../styles/theme";
+
+const Markdown = dynamic(() => import("markdown-to-jsx"), {
+  ssr: false,
+  loading: () => null,
+});
 
 const MarkdownContent = ({ children, className, sx = {} }) => {
   return (
