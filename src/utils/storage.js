@@ -8,6 +8,8 @@ import {
   ACTIVE_CHAT_KEY,
   SETTINGS_KEY,
   API_KEY_STORAGE_KEY,
+  RECENT_MODELS_KEY,
+  MAX_RECENT_MODELS,
   initialNodes,
   initialEdges,
 } from "./constants";
@@ -223,4 +225,36 @@ export const getWaitlistEmail = () => {
 export const saveWaitlistEmail = (email) => {
   if (typeof window === "undefined") return;
   localStorage.setItem("bushchat-waitlist-email", email);
+};
+
+// Load recent models from localStorage (sorted by last used, most recent first)
+export const loadRecentModels = () => {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = localStorage.getItem(RECENT_MODELS_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error("Failed to load recent models:", e);
+  }
+  return [];
+};
+
+// Save a model as recently used (adds to top of stack)
+export const saveRecentModel = (modelId) => {
+  if (typeof window === "undefined" || !modelId) return;
+  try {
+    const recentModels = loadRecentModels();
+    // Remove if already exists (will be re-added at top)
+    const filtered = recentModels.filter((m) => m.id !== modelId);
+    // Add to top with current timestamp
+    const updated = [{ id: modelId, lastUsed: Date.now() }, ...filtered].slice(
+      0,
+      MAX_RECENT_MODELS
+    );
+    localStorage.setItem(RECENT_MODELS_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error("Failed to save recent model:", e);
+  }
 };

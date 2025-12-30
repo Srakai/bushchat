@@ -53,10 +53,6 @@ export const useNodeOperations = ({
     edgesRef.current = edges;
   }, [edges]);
 
-  // Track nodes that are being regenerated in a cascade
-  const regeneratingNodesRef = useRef(new Set());
-  // Track nodes waiting for parents to complete (for merged nodes)
-  const pendingMergedNodesRef = useRef(new Map()); // nodeId -> Set of parent nodeIds still regenerating
   // Track if cascade is active to prevent duplicate triggers
   const cascadeActiveRef = useRef(false);
 
@@ -360,13 +356,14 @@ export const useNodeOperations = ({
       cascadeActiveRef.current = true;
 
       try {
-        // Clear tracking state
-        regeneratingNodesRef.current.clear();
-        pendingMergedNodesRef.current.clear();
+        // Track all nodes that have been regenerated in this cascade
+        const processedNodes = new Set([startNodeId]);
+
+        // Track nodes that are part of the regeneration chain (affected by the edit)
+        const affectedNodes = new Set([startNodeId]);
 
         // Queue for BFS traversal - process level by level
         let currentLevel = [startNodeId];
-        const processedNodes = new Set([startNodeId]);
 
         while (currentLevel.length > 0) {
           const nextLevel = [];
@@ -380,53 +377,28 @@ export const useNodeOperations = ({
               const childNode = nodesRef.current.find((n) => n.id === childId);
               if (!childNode) continue;
 
-              // For merged nodes, check if all parents have been processed
+              // For merged nodes, we regenerate if ANY parent was affected
+              // (not waiting for all parents - the other parent wasn't changed)
               if (childNode.data?.isMergedNode && childNode.data.mergeParents) {
-                const allParentsProcessed = childNode.data.mergeParents.every(
-                  (pid) => processedNodes.has(pid)
+                const anyParentAffected = childNode.data.mergeParents.some(
+                  (pid) => affectedNodes.has(pid)
                 );
-                if (!allParentsProcessed) {
-                  // Track this node for later
-                  if (!pendingMergedNodesRef.current.has(childId)) {
-                    const unprocessedParents =
-                      childNode.data.mergeParents.filter(
-                        (pid) => !processedNodes.has(pid)
-                      );
-                    pendingMergedNodesRef.current.set(
-                      childId,
-                      new Set(unprocessedParents)
-                    );
-                  }
-                  continue;
+                if (anyParentAffected) {
+                  nextLevel.push(childId);
                 }
+              } else {
+                // Regular node - add to next level
+                nextLevel.push(childId);
               }
-
-              nextLevel.push(childId);
-            }
-          }
-
-          // Also check if any pending merged nodes can now be processed
-          for (const [
-            mergedNodeId,
-            waitingFor,
-          ] of pendingMergedNodesRef.current.entries()) {
-            // Remove any parents that have been processed
-            for (const parentId of processedNodes) {
-              waitingFor.delete(parentId);
-            }
-
-            if (waitingFor.size === 0 && !processedNodes.has(mergedNodeId)) {
-              nextLevel.push(mergedNodeId);
-              pendingMergedNodesRef.current.delete(mergedNodeId);
             }
           }
 
           if (nextLevel.length === 0) break;
 
-          // Regenerate all nodes in this level (can be parallel or sequential)
-          // Using sequential to avoid overwhelming the API
+          // Regenerate all nodes in this level sequentially
           for (const childId of nextLevel) {
             processedNodes.add(childId);
+            affectedNodes.add(childId);
             await regenerateNodeAsync(childId);
           }
 

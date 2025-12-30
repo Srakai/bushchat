@@ -1,19 +1,11 @@
 "use client";
 import React from "react";
-import {
-  Paper,
-  TextField,
-  IconButton,
-  Select,
-  MenuItem,
-  FormControl,
-  Chip,
-  Box,
-} from "@mui/material";
+import { Paper, TextField, IconButton, Chip, Box } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import CloseIcon from "@mui/icons-material/Close";
 import MergeIcon from "@mui/icons-material/CallMerge";
 import { components, colors } from "../styles/theme";
+import ModelSelector from "./ModelSelector";
 
 const MAX_ROWS = 12;
 
@@ -115,19 +107,11 @@ const InputPanel = ({
           spellCheck={false}
           sx={components.textField}
         />
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <Select
-            value={selectedModel}
-            onChange={(e) => onModelChange(e.target.value)}
-            sx={components.select}
-          >
-            {modelsList.map((model) => (
-              <MenuItem key={model} value={model}>
-                {model}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <ModelSelector
+          selectedModel={selectedModel}
+          onModelChange={onModelChange}
+          modelsList={modelsList}
+        />
         <IconButton
           type="submit"
           disabled={!inputMessage.trim()}
