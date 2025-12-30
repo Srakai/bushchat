@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { Paper, TextField, IconButton, Chip, Box } from "@mui/material";
-import SendIcon from "@mui/icons-material/Send";
+import KeyboardReturnIcon from "@mui/icons-material/KeyboardReturn";
 import CloseIcon from "@mui/icons-material/Close";
 import MergeIcon from "@mui/icons-material/CallMerge";
 import { components, colors } from "../styles/theme";
@@ -64,7 +64,7 @@ const InputPanel = ({
         flexDirection: "column",
         gap: 1,
         p: 1.5,
-        minWidth: 600,
+        minWidth: 960,
         mb: 2,
       }}
     >
@@ -117,7 +117,7 @@ const InputPanel = ({
           disabled={!inputMessage.trim()}
           sx={components.buttonPrimary}
         >
-          <SendIcon />
+          <KeyboardReturnIcon fontSize="small" />
         </IconButton>
       </Box>
     </Paper>

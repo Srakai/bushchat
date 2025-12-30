@@ -110,7 +110,7 @@ export const components = {
     color: colors.text.primary,
     "&:hover": { backgroundColor: "rgba(74, 158, 255, 0.1)" },
     "&.Mui-disabled": {
-      backgroundColor: colors.button.disabled,
+      // backgroundColor: colors.button.disabled,
       color: colors.button.disabledText,
     },
   },

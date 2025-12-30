@@ -308,7 +308,6 @@ const ModelSelector = ({ selectedModel, onModelChange, modelsList }) => {
                     }}
                     sx={{
                       "& .MuiOutlinedInput-root": {
-                        backgroundColor: colors.bg.primary,
                         color: colors.text.primary,
                         fontSize: "0.875rem",
                         "& fieldset": {
