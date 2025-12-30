@@ -10,6 +10,7 @@ import {
   Tooltip,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import MarkdownContent from "./MarkdownContent";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
@@ -100,17 +101,7 @@ const CollapsibleText = ({
             : {}),
         }}
       >
-        <Typography
-          variant="body2"
-          className="ph-no-capture"
-          sx={{
-            color: colors.text.primary,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {text}
-        </Typography>
+        <MarkdownContent className="ph-no-capture">{text}</MarkdownContent>
       </Box>
       {shouldShowCollapse && (
         <Box

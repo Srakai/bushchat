@@ -4,6 +4,7 @@
 import React from "react";
 import { Box, Typography, IconButton } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import MarkdownContent from "./MarkdownContent";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
@@ -225,19 +226,12 @@ const FocusModeOverlay = ({
                 <ContentCopyIcon sx={{ fontSize: 14 }} />
               </IconButton>
             </Box>
-            <Typography
-              variant="body1"
+            <MarkdownContent
               className="ph-no-capture"
-              sx={{
-                color: colors.text.primary,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                fontSize: "1rem",
-                lineHeight: 1.7,
-              }}
+              sx={{ fontSize: "1rem", lineHeight: 1.7 }}
             >
               {focusModeNode.data?.userMessage}
-            </Typography>
+            </MarkdownContent>
           </Box>
 
           {/* Assistant response */}
@@ -268,19 +262,12 @@ const FocusModeOverlay = ({
                 <ContentCopyIcon sx={{ fontSize: 14 }} />
               </IconButton>
             </Box>
-            <Typography
-              variant="body1"
+            <MarkdownContent
               className="ph-no-capture"
-              sx={{
-                color: colors.text.primary,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                fontSize: "1rem",
-                lineHeight: 1.7,
-              }}
+              sx={{ fontSize: "1rem", lineHeight: 1.7 }}
             >
               {focusModeNode.data?.assistantMessage}
-            </Typography>
+            </MarkdownContent>
           </Box>
         </Box>
       </Box>
