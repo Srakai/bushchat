@@ -1,5 +1,5 @@
 /**
- * Toggle button for lock scroll on node focus
+ * Toggle icon for lock scroll on node focus
  */
 import React from "react";
 import { IconButton } from "@mui/material";
@@ -7,18 +7,30 @@ import ExpandIcon from "@mui/icons-material/Expand";
 import WebAssetOffIcon from "@mui/icons-material/WebAssetOff";
 import { colors } from "../styles/theme";
 
-const LockScrollToggle = ({ locked, onToggle, size = "medium" }) => {
+const LockScrollToggle = ({
+  locked,
+  onToggle,
+  size = "medium",
+  asIcon = false,
+}) => {
   const iconSize = size === "small" ? 16 : 20;
+
+  const icon = locked ? (
+    <ExpandIcon sx={{ fontSize: iconSize, color: colors.text.muted }} />
+  ) : (
+    <WebAssetOffIcon sx={{ fontSize: iconSize, color: colors.text.muted }} />
+  );
+
+  // When used inside ControlButton, just return the icon
+  if (asIcon) {
+    return icon;
+  }
 
   return (
     <IconButton
       onClick={onToggle}
       size={size}
-      title={
-        locked
-          ? "Canvas scroll locked on node hover (click to unlock)"
-          : "Canvas scroll unlocked (click to lock on node hover)"
-      }
+      title={locked ? "(click to unlock)" : "(click to lock on node hover)"}
       sx={{
         color: colors.text.muted,
         "&:hover": {
@@ -27,11 +39,7 @@ const LockScrollToggle = ({ locked, onToggle, size = "medium" }) => {
         },
       }}
     >
-      {locked ? (
-        <ExpandIcon sx={{ fontSize: iconSize }} />
-      ) : (
-        <WebAssetOffIcon sx={{ fontSize: iconSize }} />
-      )}
+      {icon}
     </IconButton>
   );
 };

@@ -1,23 +1,37 @@
 /**
- * Toggle button for pan/scroll mode
+ * Toggle icon for pan/scroll mode
  */
 import React from "react";
-import { IconButton } from "@mui/material";
+import { IconButton, Box } from "@mui/material";
 import PanToolIcon from "@mui/icons-material/PanTool";
 import SwapVertIcon from "@mui/icons-material/SwapVert";
 import { colors } from "../styles/theme";
 
-const PanScrollToggle = ({ panOnScroll, onToggle, size = "medium" }) => {
+const PanScrollToggle = ({
+  panOnScroll,
+  onToggle,
+  size = "medium",
+  asIcon = false,
+}) => {
   const iconSize = size === "small" ? 16 : 20;
+
+  const icon = panOnScroll ? (
+    <PanToolIcon sx={{ fontSize: iconSize, color: colors.text.muted }} />
+  ) : (
+    <SwapVertIcon sx={{ fontSize: iconSize, color: colors.text.muted }} />
+  );
+
+  // When used inside ControlButton, just return the icon
+  if (asIcon) {
+    return icon;
+  }
 
   return (
     <IconButton
       onClick={onToggle}
       size={size}
       title={
-        panOnScroll
-          ? "Scroll to pan (click to switch to zoom)"
-          : "Scroll to zoom (click to switch to pan)"
+        panOnScroll ? "(click to switch to zoom)" : "(click to switch to pan)"
       }
       sx={{
         color: colors.text.muted,
@@ -27,11 +41,7 @@ const PanScrollToggle = ({ panOnScroll, onToggle, size = "medium" }) => {
         },
       }}
     >
-      {panOnScroll ? (
-        <PanToolIcon sx={{ fontSize: iconSize }} />
-      ) : (
-        <SwapVertIcon sx={{ fontSize: iconSize }} />
-      )}
+      {icon}
     </IconButton>
   );
 };

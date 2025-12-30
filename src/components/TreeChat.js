@@ -506,18 +506,28 @@ const TreeChatInner = () => {
           className="custom-controls"
           showInteractive={false}
         >
-          <ControlButton>
-            <PanScrollToggle
-              panOnScroll={panOnScroll}
-              onToggle={() => setPanOnScroll((prev) => !prev)}
-              size="small"
-            />
+          <ControlButton
+            onClick={() => setPanOnScroll((prev) => !prev)}
+            title={
+              panOnScroll
+                ? "Scroll to pan (click to switch to zoom)"
+                : "Scroll to zoom (click to switch to pan)"
+            }
+          >
+            <PanScrollToggle panOnScroll={panOnScroll} size="small" asIcon />
           </ControlButton>
-          <ControlButton>
+          <ControlButton
+            onClick={() => setLockScrollOnNodeFocus((prev) => !prev)}
+            title={
+              lockScrollOnNodeFocus
+                ? "Canvas scroll locked on node hover (click to unlock)"
+                : "Canvas scroll unlocked (click to lock on node hover)"
+            }
+          >
             <LockScrollToggle
               locked={lockScrollOnNodeFocus}
-              onToggle={() => setLockScrollOnNodeFocus((prev) => !prev)}
               size="small"
+              asIcon
             />
           </ControlButton>
         </Controls>
