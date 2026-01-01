@@ -57,7 +57,9 @@ const processStreamingResponse = async (
  * Hook for making chat API requests directly to OpenAI-compatible APIs
  * Works with static hosting (GitHub Pages) - no backend required
  */
-export const useChatApi = (settings) => {
+export const useChatApi = (settings, options = {}) => {
+  const { webSearchEnabled = false } = options;
+
   const sendChatRequest = useCallback(
     async (messages, model, onChunk, onComplete, onError) => {
       const apiKey = settings.apiKey;
@@ -75,19 +77,29 @@ export const useChatApi = (settings) => {
       // Check if model supports streaming (o1 models don't support streaming)
       const supportsStreaming = !model.startsWith("o1");
 
+      // Build request body
+      const requestBody = {
+        model,
+        messages,
+        max_completion_tokens: 4000,
+        stream: supportsStreaming,
+      };
+
+      // Add plugins if web search is enabled
+      if (webSearchEnabled) {
+        requestBody.plugins = [{ id: "web" }];
+      }
+
       try {
         const response = await fetch(`${apiUrl}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${apiKey}`,
+            "HTTP-Referer": "https://bushchat.xyz", // OpenRouter app attribution
+            "X-Title": "bushchat",
           },
-          body: JSON.stringify({
-            model,
-            messages,
-            max_completion_tokens: 4000,
-            stream: supportsStreaming,
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         if (!response.ok) {
@@ -114,7 +126,7 @@ export const useChatApi = (settings) => {
         onError(error);
       }
     },
-    [settings]
+    [settings, webSearchEnabled]
   );
 
   return { sendChatRequest };

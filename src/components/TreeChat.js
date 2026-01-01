@@ -94,6 +94,9 @@ const TreeChatInner = () => {
     () => settings.lockScrollOnNodeFocus || false
   );
 
+  // Web search toggle state
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+
   // Merge state
   const [mergeMode, setMergeMode] = useState(null);
   const [pendingMerge, setPendingMerge] = useState(null);
@@ -110,7 +113,7 @@ const TreeChatInner = () => {
     useModels(settings);
 
   // Chat API hook
-  const { sendChatRequest } = useChatApi(settings);
+  const { sendChatRequest } = useChatApi(settings, { webSearchEnabled });
 
   const { fitView } = useReactFlow();
 
@@ -549,6 +552,8 @@ const TreeChatInner = () => {
               setPendingMerge(null);
               setInputMessage("");
             }}
+            webSearchEnabled={webSearchEnabled}
+            onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
           />
         </Panel>
 

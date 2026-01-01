@@ -187,6 +187,28 @@ export const components = {
     color: colors.text.muted,
     "&.Mui-checked": { color: colors.accent.blue },
   },
+
+  // Toggle icon button (for on/off state buttons like web search)
+  iconButtonToggle: {
+    base: {
+      backgroundColor: "transparent",
+      color: colors.text.muted,
+      "&:hover": {
+        backgroundColor: "rgba(255, 255, 255, 0.1)",
+        color: colors.text.muted,
+      },
+      "& .MuiSvgIcon-root": { color: colors.text.muted },
+    },
+    active: {
+      backgroundColor: "rgba(255, 255, 255, 0.1)",
+      color: colors.text.primary,
+      "&:hover": {
+        backgroundColor: "rgba(255, 255, 255, 0.15)",
+        color: colors.text.primary,
+      },
+      "& .MuiSvgIcon-root": { color: colors.text.primary },
+    },
+  },
 };
 
 // Typography presets

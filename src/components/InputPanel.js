@@ -1,9 +1,17 @@
 "use client";
 import React from "react";
-import { Paper, TextField, IconButton, Chip, Box } from "@mui/material";
+import {
+  Paper,
+  TextField,
+  IconButton,
+  Chip,
+  Box,
+  Tooltip,
+} from "@mui/material";
 import KeyboardReturnIcon from "@mui/icons-material/KeyboardReturn";
 import CloseIcon from "@mui/icons-material/Close";
 import MergeIcon from "@mui/icons-material/CallMerge";
+import LanguageIcon from "@mui/icons-material/Language";
 import { components, colors } from "../styles/theme";
 import ModelSelector from "./ModelSelector";
 
@@ -19,6 +27,8 @@ const InputPanel = ({
   isRootSelected,
   isPendingMerge,
   onCancelPendingMerge,
+  webSearchEnabled,
+  onWebSearchToggle,
 }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -112,6 +122,20 @@ const InputPanel = ({
           onModelChange={onModelChange}
           modelsList={modelsList}
         />
+        <Tooltip
+          title={webSearchEnabled ? "Web search enabled" : "Enable web search"}
+        >
+          <IconButton
+            onClick={onWebSearchToggle}
+            sx={
+              webSearchEnabled
+                ? components.iconButtonToggle.active
+                : components.iconButtonToggle.base
+            }
+          >
+            <LanguageIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <IconButton
           type="submit"
           disabled={!inputMessage.trim()}
