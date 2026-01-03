@@ -17,6 +17,7 @@ export const useModels = (settings) => {
 
   const [selectedModel, setSelectedModel] = useState(getInitialModel);
   const [modelsList, setModelsList] = useState(defaultModels);
+  const [modelsData, setModelsData] = useState({}); // Map of model ID to full metadata
   const initialFetchDone = useRef(false);
 
   // Auto-fetch models on startup if API key is configured
@@ -35,21 +36,29 @@ export const useModels = (settings) => {
           if (!response.ok) return;
 
           const data = await response.json();
+
+          // Build models data map and list
+          const modelsMap = {};
           const fetchedModels =
             data.data
-              ?.map((m) => m.id)
               ?.filter(
-                (id) =>
-                  id &&
-                  !id.includes("embedding") &&
-                  !id.includes("whisper") &&
-                  !id.includes("tts") &&
-                  !id.includes("dall-e")
+                (m) =>
+                  m.id &&
+                  !m.id.includes("embedding") &&
+                  !m.id.includes("whisper") &&
+                  !m.id.includes("tts") &&
+                  !m.id.includes("dall-e")
               )
+              ?.map((m) => {
+                // Store full model data
+                modelsMap[m.id] = m;
+                return m.id;
+              })
               ?.sort() || [];
 
           if (fetchedModels.length > 0) {
             setModelsList(fetchedModels);
+            setModelsData(modelsMap);
             // Only change selected model if current one isn't in the list
             setSelectedModel((current) => {
               // Check if current model exists in new list
@@ -80,5 +89,7 @@ export const useModels = (settings) => {
     setSelectedModel,
     modelsList,
     setModelsList,
+    modelsData,
+    setModelsData,
   };
 };

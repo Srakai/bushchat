@@ -4,6 +4,7 @@
 import { useCallback, useRef, useEffect } from "react";
 import { useReactFlow } from "reactflow";
 import { CONTEXT_MODE } from "../components/MergeEdge";
+import { modelSupportsVision } from "../utils/visionModels";
 import {
   getPathToNode,
   buildConversationFromPath,
@@ -37,6 +38,7 @@ export const useNodeOperations = ({
   selectedNodeId,
   setSelectedNodeId,
   selectedModel,
+  modelsData,
   nodeIdCounterRef,
   sendChatRequest,
   isSharedView,
@@ -815,20 +817,15 @@ export const useNodeOperations = ({
         artifactNodeIds.forEach((id) => {
           const node = nodes.find((n) => n.id === id);
           if (node) {
-            const artifactContent =
-              node.data.artifactType === "image"
-                ? `[Image: ${node.data.name}]`
-                : node.data.content;
+            const isImage = node.data.artifactType === "image";
             branches.push({
               nodeId: id,
-              messages: [
-                {
-                  role: "user",
-                  content: `[Artifact: ${node.data.name}]\n${artifactContent}`,
-                },
-              ],
+              messages: [],
               isArtifact: true,
               artifactName: node.data.name,
+              artifactType: node.data.artifactType,
+              // Store full content for images (base64 data URL)
+              artifactContent: node.data.content,
             });
           }
         });
@@ -882,6 +879,9 @@ export const useNodeOperations = ({
 
       const { selectedNodeIds, lcaId, branches } = pendingMerge;
 
+      // Check if model supports vision
+      const supportsVision = modelSupportsVision(selectedModel, modelsData);
+
       // Get the base context from LCA path (only if we have chat nodes)
       const chatNodeIds = selectedNodeIds.filter((id) => {
         const node = nodes.find((n) => n.id === id);
@@ -896,24 +896,48 @@ export const useNodeOperations = ({
         baseContext = buildConversationFromPath(lcaPath);
       }
 
-      // Build merged prompt with all branches
-      const branchCount = branches.length;
-      let mergedPrompt = `You are continuing a conversation that includes ${branchCount} sources. Here are all sources:\n\n`;
+      // Separate text and image artifacts
+      const textArtifacts = branches.filter(
+        (b) => b.isArtifact && b.artifactType === "text"
+      );
+      const imageArtifacts = branches.filter(
+        (b) => b.isArtifact && b.artifactType === "image"
+      );
+      const chatBranches = branches.filter((b) => !b.isArtifact);
 
-      branches.forEach((branch, index) => {
-        const branchLabel = String.fromCharCode(65 + index); // A, B, C, D, ...
-        if (branch.isArtifact) {
-          mergedPrompt += `=== ARTIFACT: ${branch.artifactName} ===\n`;
-          mergedPrompt += `${branch.messages[0]?.content || ""}\n\n`;
-        } else {
+      // Build merged prompt with text content
+      const branchCount = chatBranches.length + textArtifacts.length;
+      let mergedPrompt = "";
+
+      if (branchCount > 0) {
+        mergedPrompt = `You are continuing a conversation that includes ${
+          branchCount +
+          (supportsVision && imageArtifacts.length > 0
+            ? imageArtifacts.length
+            : 0)
+        } sources. Here are the sources:\n\n`;
+
+        chatBranches.forEach((branch, index) => {
+          const branchLabel = String.fromCharCode(65 + index);
           mergedPrompt += `=== BRANCH ${branchLabel} ===\n`;
           for (const msg of branch.messages) {
             mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
           }
-        }
-      });
+        });
 
-      mergedPrompt += "=== END SOURCES ===\n\n";
+        textArtifacts.forEach((branch) => {
+          mergedPrompt += `=== ARTIFACT: ${branch.artifactName} ===\n`;
+          mergedPrompt += `${branch.artifactContent}\n\n`;
+        });
+
+        if (supportsVision && imageArtifacts.length > 0) {
+          mergedPrompt += `=== IMAGES ===\n`;
+          mergedPrompt += `${imageArtifacts.length} image(s) attached below.\n\n`;
+        }
+
+        mergedPrompt += "=== END SOURCES ===\n\n";
+      }
+
       mergedPrompt += userPrompt;
 
       const newNodeId = `node-${nodeIdCounterRef.current++}`;
@@ -988,9 +1012,40 @@ export const useNodeOperations = ({
       setSelectedNodeId(newNodeId);
       setPendingMerge(null);
 
+      // Build the user message content - can be multimodal for vision models
+      let userMessageContent;
+
+      if (supportsVision && imageArtifacts.length > 0) {
+        // Build multimodal content array for vision models
+        const contentParts = [{ type: "text", text: mergedPrompt }];
+
+        // Add images
+        for (const imgArtifact of imageArtifacts) {
+          const imageUrl = imgArtifact.artifactContent;
+          // Check if it's a data URL
+          if (imageUrl.startsWith("data:")) {
+            contentParts.push({
+              type: "image_url",
+              image_url: { url: imageUrl },
+            });
+          } else {
+            // Regular URL
+            contentParts.push({
+              type: "image_url",
+              image_url: { url: imageUrl },
+            });
+          }
+        }
+
+        userMessageContent = contentParts;
+      } else {
+        // Text-only content
+        userMessageContent = mergedPrompt;
+      }
+
       const conversationMessages = [
         ...baseContext,
-        { role: "user", content: mergedPrompt },
+        { role: "user", content: userMessageContent },
       ];
 
       await sendChatRequest(

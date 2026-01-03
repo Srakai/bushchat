@@ -115,8 +115,14 @@ const TreeChatInner = () => {
   const nodeIdCounterRef = useRef(1);
 
   // Models hook
-  const { selectedModel, setSelectedModel, modelsList, setModelsList } =
-    useModels(settings);
+  const {
+    selectedModel,
+    setSelectedModel,
+    modelsList,
+    setModelsList,
+    modelsData,
+    setModelsData,
+  } = useModels(settings);
 
   // Chat API hook
   const { sendChatRequest } = useChatApi(settings, { webSearchEnabled });
@@ -323,6 +329,7 @@ const TreeChatInner = () => {
     selectedNodeId,
     setSelectedNodeId,
     selectedModel,
+    modelsData,
     nodeIdCounterRef,
     sendChatRequest,
     isSharedView,
@@ -618,6 +625,7 @@ const TreeChatInner = () => {
             selectedModel={selectedModel}
             onModelChange={setSelectedModel}
             modelsList={modelsList}
+            modelsData={modelsData}
             isRootSelected={selectedNode?.data?.isRoot}
             isPendingMerge={!!pendingMerge}
             onCancelPendingMerge={() => {
@@ -667,6 +675,7 @@ const TreeChatInner = () => {
           onSave={handleSaveSettings}
           modelsList={modelsList}
           setModelsList={setModelsList}
+          setModelsData={setModelsData}
           setSelectedModel={setSelectedModel}
         />
 

@@ -25,6 +25,7 @@ const SettingsModal = ({
   onSave,
   modelsList,
   setModelsList,
+  setModelsData,
   setSelectedModel,
 }) => {
   const [tempSettings, setTempSettings] = useState({ ...settings });
@@ -54,21 +55,29 @@ const SettingsModal = ({
       }
 
       const data = await response.json();
+
+      // Build models data map and list
+      const modelsMap = {};
       const fetchedModels =
         data.data
-          ?.map((m) => m.id)
           ?.filter(
-            (id) =>
-              id &&
-              !id.includes("embedding") &&
-              !id.includes("whisper") &&
-              !id.includes("tts") &&
-              !id.includes("dall-e")
+            (m) =>
+              m.id &&
+              !m.id.includes("embedding") &&
+              !m.id.includes("whisper") &&
+              !m.id.includes("tts") &&
+              !m.id.includes("dall-e")
           )
+          ?.map((m) => {
+            // Store full model data
+            modelsMap[m.id] = m;
+            return m.id;
+          })
           ?.sort() || [];
 
       if (fetchedModels.length > 0) {
         setModelsList(fetchedModels);
+        setModelsData?.(modelsMap);
         // If current model not in list, select first one
         setSelectedModel((current) =>
           fetchedModels.includes(current) ? current : fetchedModels[0]
@@ -80,7 +89,7 @@ const SettingsModal = ({
     } finally {
       setIsLoadingModels(false);
     }
-  }, [tempSettings, setModelsList, setSelectedModel]);
+  }, [tempSettings, setModelsList, setModelsData, setSelectedModel]);
 
   const handleSave = () => {
     onSave(tempSettings);

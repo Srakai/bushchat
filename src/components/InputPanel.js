@@ -15,6 +15,7 @@ import LanguageIcon from "@mui/icons-material/Language";
 import PostAddIcon from "@mui/icons-material/PostAdd";
 import { components, colors } from "../styles/theme";
 import ModelSelector from "./ModelSelector";
+import { getVisionSupport, VISION_SUPPORT } from "../utils/visionModels";
 
 const MAX_ROWS = 12;
 
@@ -25,6 +26,7 @@ const InputPanel = ({
   selectedModel,
   onModelChange,
   modelsList,
+  modelsData,
   isRootSelected,
   isPendingMerge,
   onCancelPendingMerge,
@@ -32,6 +34,21 @@ const InputPanel = ({
   onWebSearchToggle,
   onOpenArtifacts,
 }) => {
+  // Get vision support info for tooltip
+  const visionSupport = getVisionSupport(selectedModel, modelsData);
+  const getVisionTooltip = () => {
+    switch (visionSupport) {
+      case VISION_SUPPORT.SUPPORTED:
+        return "✓ Supports images";
+      case VISION_SUPPORT.NOT_SUPPORTED:
+        return "✗ Does not support images";
+      case VISION_SUPPORT.UNKNOWN:
+        return "? Vision support unknown";
+      default:
+        return "";
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (inputMessage.trim()) {
@@ -127,11 +144,15 @@ const InputPanel = ({
           spellCheck={false}
           sx={components.textField}
         />
-        <ModelSelector
-          selectedModel={selectedModel}
-          onModelChange={onModelChange}
-          modelsList={modelsList}
-        />
+        <Tooltip title={getVisionTooltip()} arrow placement="top">
+          <Box>
+            <ModelSelector
+              selectedModel={selectedModel}
+              onModelChange={onModelChange}
+              modelsList={modelsList}
+            />
+          </Box>
+        </Tooltip>
         <Tooltip
           title={webSearchEnabled ? "Web search enabled" : "Enable web search"}
         >
