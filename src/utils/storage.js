@@ -9,7 +9,6 @@ import {
   SETTINGS_KEY,
   API_KEY_STORAGE_KEY,
   RECENT_MODELS_KEY,
-  ARTIFACTS_KEY,
   MAX_RECENT_MODELS,
   initialNodes,
   initialEdges,
@@ -257,65 +256,5 @@ export const saveRecentModel = (modelId) => {
     localStorage.setItem(RECENT_MODELS_KEY, JSON.stringify(updated));
   } catch (e) {
     console.error("Failed to save recent model:", e);
-  }
-};
-
-// Generate unique artifact ID
-export const generateArtifactId = () =>
-  `artifact-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-
-// Load all artifacts from localStorage
-export const loadArtifacts = () => {
-  if (typeof window === "undefined") return [];
-  try {
-    const saved = localStorage.getItem(ARTIFACTS_KEY);
-    if (saved) {
-      return JSON.parse(saved);
-    }
-  } catch (e) {
-    console.error("Failed to load artifacts:", e);
-  }
-  return [];
-};
-
-// Save artifacts list to localStorage
-export const saveArtifacts = (artifacts) => {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(ARTIFACTS_KEY, JSON.stringify(artifacts));
-  } catch (e) {
-    console.error("Failed to save artifacts:", e);
-  }
-};
-
-// Add a new artifact
-export const addArtifact = (artifact) => {
-  const artifacts = loadArtifacts();
-  const newArtifact = {
-    id: generateArtifactId(),
-    createdAt: Date.now(),
-    ...artifact,
-  };
-  saveArtifacts([newArtifact, ...artifacts]);
-  return newArtifact;
-};
-
-// Delete an artifact by ID
-export const deleteArtifact = (artifactId) => {
-  const artifacts = loadArtifacts();
-  saveArtifacts(artifacts.filter((a) => a.id !== artifactId));
-};
-
-// Update an artifact
-export const updateArtifact = (artifactId, updates) => {
-  const artifacts = loadArtifacts();
-  const index = artifacts.findIndex((a) => a.id === artifactId);
-  if (index >= 0) {
-    artifacts[index] = {
-      ...artifacts[index],
-      ...updates,
-      updatedAt: Date.now(),
-    };
-    saveArtifacts(artifacts);
   }
 };
