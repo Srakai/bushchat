@@ -17,6 +17,14 @@ const getImmediateChildren = (nodeId, edges) => {
   return edges.filter((e) => e.source === nodeId).map((e) => e.target);
 };
 
+// Default vertical gap between nodes
+const NODE_VERTICAL_GAP = 50;
+
+// Get node height from measured dimensions or use default
+const getNodeHeight = (node) => {
+  return node?.measured?.height || node?.height || 200;
+};
+
 // Default prompt for merge operations
 export const DEFAULT_MERGE_PROMPT =
   "Please synthesize insights from both branches and continue the conversation, acknowledging key points from each path.";
@@ -89,6 +97,7 @@ export const useNodeOperations = ({
       const parentNode = nodes.find((n) => n.id === parentNodeId);
       const existingChildren = edges.filter((e) => e.source === parentNodeId);
       const xOffset = existingChildren.length * 320;
+      const parentHeight = getNodeHeight(parentNode);
 
       const newNode = {
         id: newNodeId,
@@ -98,7 +107,7 @@ export const useNodeOperations = ({
             parentNode.position.x +
             xOffset -
             (existingChildren.length > 0 ? 160 : 0),
-          y: parentNode.position.y + 200,
+          y: parentNode.position.y + parentHeight + NODE_VERTICAL_GAP,
         },
         data: {
           userMessage,
@@ -859,21 +868,23 @@ export const useNodeOperations = ({
 
       const newNodeId = `node-${nodeIdCounterRef.current++}`;
 
-      // Calculate position - average x, max y + offset
+      // Calculate position - average x, max (y + height) + gap
       const parentNodes = selectedNodeIds.map((id) =>
         nodes.find((n) => n.id === id)
       );
       const avgX =
         parentNodes.reduce((sum, n) => sum + n.position.x, 0) /
         parentNodes.length;
-      const maxY = Math.max(...parentNodes.map((n) => n.position.y));
+      const maxYWithHeight = Math.max(
+        ...parentNodes.map((n) => n.position.y + getNodeHeight(n))
+      );
 
       const newNode = {
         id: newNodeId,
         type: "chatNode",
         position: {
           x: avgX,
-          y: maxY + 200,
+          y: maxYWithHeight + NODE_VERTICAL_GAP,
         },
         data: {
           userMessage: userPrompt,
