@@ -411,13 +411,10 @@ const TreeChatInner = () => {
     }
   }, [nodes, edges, selectedNodeId]);
 
-  // Artifact ID counter ref
-  const artifactIdCounterRef = useRef(1);
-
   // Create artifact node on canvas
   const handleCreateArtifact = useCallback(
     (artifact) => {
-      const artifactId = `artifact-${artifactIdCounterRef.current++}`;
+      const artifactId = `artifact-${crypto.randomUUID()}`;
       const newNode = {
         id: artifactId,
         type: "artifactNode",
@@ -450,7 +447,25 @@ const TreeChatInner = () => {
   // Delete artifact node
   const handleDeleteArtifact = useCallback(
     (nodeId) => {
-      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setNodes((nds) =>
+        nds
+          .filter((n) => n.id !== nodeId)
+          .map((n) => {
+            // Clean up mergedArtifacts references in merged nodes
+            if (n.data?.mergedArtifacts?.includes(nodeId)) {
+              return {
+                ...n,
+                data: {
+                  ...n.data,
+                  mergedArtifacts: n.data.mergedArtifacts.filter(
+                    (id) => id !== nodeId
+                  ),
+                },
+              };
+            }
+            return n;
+          })
+      );
       setEdges((eds) =>
         eds.filter((e) => e.source !== nodeId && e.target !== nodeId)
       );
