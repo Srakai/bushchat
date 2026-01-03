@@ -856,18 +856,20 @@ export const useNodeOperations = ({
 
         // Add artifact nodes as special branches
         artifactNodeIds.forEach((id) => {
-          const node = nodes.find((n) => n.id === id);
-          if (node) {
-            branches.push({
-              nodeId: id,
-              messages: [],
-              isArtifact: true,
-              artifactName: node.data.name,
-              artifactType: node.data.artifactType,
-              // Store full content for images (base64 data URL)
-              artifactContent: node.data.content,
-            });
+          // Ensure artifactType exists before adding the artifact branch
+          if (!node || !node.data || node.data.artifactType == null) {
+            return;
           }
+          const isImage = node.data.artifactType === "image";
+          branches.push({
+            nodeId: id,
+            messages: [],
+            isArtifact: true,
+            artifactName: node.data.name,
+            artifactType: node.data.artifactType,
+            // Store full content for images (base64 data URL)
+            artifactContent: node.data.content,
+          });
         });
 
         setPendingMerge({
