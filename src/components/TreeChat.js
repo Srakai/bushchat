@@ -21,6 +21,7 @@ import { Box, Snackbar, Alert } from "@mui/material";
 
 // Components
 import ChatNode from "./ChatNode";
+import ArtifactNode from "./ArtifactNode";
 import MergeEdge from "./MergeEdge";
 import SettingsModal from "./SettingsModal";
 import WaitlistModal from "./WaitlistModal";
@@ -29,6 +30,7 @@ import InputPanel from "./InputPanel";
 import FocusModeOverlay from "./FocusModeOverlay";
 import PanScrollToggle from "./PanScrollToggle";
 import LockScrollToggle from "./LockScrollToggle";
+import ArtifactModal from "./ArtifactModal";
 
 // Hooks
 import { useChatApi } from "../hooks/useChatApi";
@@ -63,6 +65,7 @@ import {
 
 const nodeTypes = {
   chatNode: ChatNode,
+  artifactNode: ArtifactNode,
 };
 
 const edgeTypes = {
@@ -76,6 +79,9 @@ const TreeChatInner = () => {
 
   // Waitlist modal state
   const [waitlistOpen, setWaitlistOpen] = useState(false);
+
+  // Artifact modal state
+  const [artifactModalOpen, setArtifactModalOpen] = useState(false);
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState({
@@ -109,8 +115,14 @@ const TreeChatInner = () => {
   const nodeIdCounterRef = useRef(1);
 
   // Models hook
-  const { selectedModel, setSelectedModel, modelsList, setModelsList } =
-    useModels(settings);
+  const {
+    selectedModel,
+    setSelectedModel,
+    modelsList,
+    setModelsList,
+    modelsData,
+    setModelsData,
+  } = useModels(settings);
 
   // Chat API hook
   const { sendChatRequest } = useChatApi(settings, { webSearchEnabled });
@@ -317,6 +329,7 @@ const TreeChatInner = () => {
     selectedNodeId,
     setSelectedNodeId,
     selectedModel,
+    modelsData,
     nodeIdCounterRef,
     sendChatRequest,
     isSharedView,
@@ -398,6 +411,68 @@ const TreeChatInner = () => {
     }
   }, [nodes, edges, selectedNodeId]);
 
+  // Create artifact node on canvas
+  const handleCreateArtifact = useCallback(
+    (artifact) => {
+      const artifactId = `artifact-${crypto.randomUUID()}`;
+      const newNode = {
+        id: artifactId,
+        type: "artifactNode",
+        position: { x: 100, y: 100 },
+        data: {
+          name: artifact.name,
+          artifactType: artifact.type,
+          content: artifact.content,
+        },
+      };
+      setNodes((nds) => [...nds, newNode]);
+    },
+    [setNodes]
+  );
+
+  // Edit artifact node
+  const handleEditArtifact = useCallback(
+    (nodeId, updates) => {
+      setNodes((nds) =>
+        nds.map((node) =>
+          node.id === nodeId
+            ? { ...node, data: { ...node.data, ...updates } }
+            : node
+        )
+      );
+    },
+    [setNodes]
+  );
+
+  // Delete artifact node
+  const handleDeleteArtifact = useCallback(
+    (nodeId) => {
+      setNodes((nds) =>
+        nds
+          .filter((n) => n.id !== nodeId)
+          .map((n) => {
+            // Clean up mergedArtifacts references in merged nodes
+            if (n.data?.mergedArtifacts?.includes(nodeId)) {
+              return {
+                ...n,
+                data: {
+                  ...n.data,
+                  mergedArtifacts: n.data.mergedArtifacts.filter(
+                    (id) => id !== nodeId
+                  ),
+                },
+              };
+            }
+            return n;
+          })
+      );
+      setEdges((eds) =>
+        eds.filter((e) => e.source !== nodeId && e.target !== nodeId)
+      );
+    },
+    [setNodes, setEdges]
+  );
+
   // Get the selected node
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedNodeId),
@@ -413,21 +488,38 @@ const TreeChatInner = () => {
   // Inject callbacks into all nodes
   const nodesWithCallbacks = useMemo(() => {
     const selectedNodeIds = mergeMode?.selectedNodeIds || [];
-    return nodes.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        onAddBranch: handleAddBranch,
-        onEditNode: handleEditNode,
-        onDeleteNode: handleDeleteNode,
-        onMergeNode: handleMergeNode,
-        onRegenerateMerge: handleRegenerateMerge,
-        onToggleCollapse: handleToggleCollapse,
-        isMergeSource: selectedNodeIds.includes(node.id),
-        mergeSelectionCount: selectedNodeIds.length,
-        lockScrollOnNodeFocus,
-      },
-    }));
+    return nodes.map((node) => {
+      if (node.type === "artifactNode") {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            onEditArtifact: handleEditArtifact,
+            onDeleteArtifact: handleDeleteArtifact,
+            onMergeNode: handleMergeNode,
+            onToggleCollapse: handleToggleCollapse,
+            isMergeSource: selectedNodeIds.includes(node.id),
+            mergeSelectionCount: selectedNodeIds.length,
+            lockScrollOnNodeFocus,
+          },
+        };
+      }
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          onAddBranch: handleAddBranch,
+          onEditNode: handleEditNode,
+          onDeleteNode: handleDeleteNode,
+          onMergeNode: handleMergeNode,
+          onRegenerateMerge: handleRegenerateMerge,
+          onToggleCollapse: handleToggleCollapse,
+          isMergeSource: selectedNodeIds.includes(node.id),
+          mergeSelectionCount: selectedNodeIds.length,
+          lockScrollOnNodeFocus,
+        },
+      };
+    });
   }, [
     nodes,
     handleAddBranch,
@@ -436,6 +528,8 @@ const TreeChatInner = () => {
     handleMergeNode,
     handleRegenerateMerge,
     handleToggleCollapse,
+    handleEditArtifact,
+    handleDeleteArtifact,
     mergeMode,
     lockScrollOnNodeFocus,
   ]);
@@ -546,6 +640,7 @@ const TreeChatInner = () => {
             selectedModel={selectedModel}
             onModelChange={setSelectedModel}
             modelsList={modelsList}
+            modelsData={modelsData}
             isRootSelected={selectedNode?.data?.isRoot}
             isPendingMerge={!!pendingMerge}
             onCancelPendingMerge={() => {
@@ -554,8 +649,16 @@ const TreeChatInner = () => {
             }}
             webSearchEnabled={webSearchEnabled}
             onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
+            onOpenArtifacts={() => setArtifactModalOpen(true)}
           />
         </Panel>
+
+        {/* Artifact Modal */}
+        <ArtifactModal
+          open={artifactModalOpen}
+          onClose={() => setArtifactModalOpen(false)}
+          onCreateArtifact={handleCreateArtifact}
+        />
 
         {/* Info Panel */}
         <Panel position="top-left">
@@ -587,6 +690,7 @@ const TreeChatInner = () => {
           onSave={handleSaveSettings}
           modelsList={modelsList}
           setModelsList={setModelsList}
+          setModelsData={setModelsData}
           setSelectedModel={setSelectedModel}
         />
 

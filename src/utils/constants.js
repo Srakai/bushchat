@@ -8,6 +8,7 @@ export const ACTIVE_CHAT_KEY = "bushchat-active-chat";
 export const SETTINGS_KEY = "bushchat-settings";
 export const API_KEY_STORAGE_KEY = "bushchat-api-key";
 export const RECENT_MODELS_KEY = "bushchat-recent-models";
+export const ARTIFACTS_KEY = "bushchat-artifacts";
 export const MAX_RECENT_MODELS = 5;
 
 // Default models list

@@ -1,5 +1,5 @@
 "use client";
-import React, { memo, useState, useRef, useCallback, useEffect } from "react";
+import React, { memo, useState } from "react";
 import { Handle, Position } from "reactflow";
 import {
   Box,
@@ -10,133 +10,15 @@ import {
   Tooltip,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import MarkdownContent from "./MarkdownContent";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import MergeIcon from "@mui/icons-material/CallMerge";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import CollapsibleText from "./CollapsibleText";
 import { colors, components } from "../styles/theme";
-
-const COLLAPSE_LINE_THRESHOLD = 16;
-const MAX_COLLAPSED_HEIGHT = 500; // Approximate height for 16 lines
-
-const countLines = (text) => {
-  if (!text) return 0;
-  return text.split("\n").length;
-};
-
-const CollapsibleText = ({
-  text,
-  collapsed,
-  onToggleCollapse,
-  lockScrollOnNodeFocus,
-}) => {
-  const scrollRef = useRef(null);
-  const lineCount = countLines(text);
-  const shouldShowCollapse = lineCount > COLLAPSE_LINE_THRESHOLD;
-  // Use prop if provided, otherwise default based on line count
-  const isCollapsed =
-    collapsed !== undefined ? collapsed : lineCount > COLLAPSE_LINE_THRESHOLD;
-
-  // Use effect to add wheel event listener with passive: false to allow preventDefault
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || !lockScrollOnNodeFocus) return;
-
-    const handleWheel = (e) => {
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      const isScrollable = scrollHeight > clientHeight;
-
-      if (!isScrollable) return;
-
-      const atTop = scrollTop <= 0;
-      const atBottom = scrollTop + clientHeight >= scrollHeight - 1;
-
-      // Check if we can scroll in the wheel direction
-      const canScrollUp = e.deltaY < 0 && !atTop;
-      const canScrollDown = e.deltaY > 0 && !atBottom;
-
-      if (canScrollUp || canScrollDown) {
-        // Stop the event from reaching ReactFlow
-        e.stopPropagation();
-        e.preventDefault();
-        // Manually scroll the element
-        el.scrollTop += e.deltaY;
-      }
-    };
-
-    el.addEventListener("wheel", handleWheel, { passive: false });
-    return () => el.removeEventListener("wheel", handleWheel);
-  }, [lockScrollOnNodeFocus, isCollapsed]);
-
-  return (
-    <Box sx={{ position: "relative" }}>
-      <Box
-        ref={scrollRef}
-        sx={{
-          ...(isCollapsed && shouldShowCollapse
-            ? {
-                maxHeight: MAX_COLLAPSED_HEIGHT,
-                overflowY: "auto",
-                "&::-webkit-scrollbar": {
-                  width: 6,
-                },
-                "&::-webkit-scrollbar-track": {
-                  background: colors.bg.tertiary,
-                  borderRadius: 3,
-                },
-                "&::-webkit-scrollbar-thumb": {
-                  background: colors.border.primary,
-                  borderRadius: 3,
-                  "&:hover": {
-                    background: colors.text.dim,
-                  },
-                },
-              }
-            : {}),
-        }}
-      >
-        <MarkdownContent className="ph-no-capture">{text}</MarkdownContent>
-      </Box>
-      {shouldShowCollapse && (
-        <Box
-          onClick={(e) => {
-            e.stopPropagation();
-            if (onToggleCollapse) onToggleCollapse(!isCollapsed);
-          }}
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 0.5,
-            mt: 0.5,
-            cursor: "pointer",
-            color: colors.accent.blue,
-            "&:hover": { color: colors.accent.blueHover },
-          }}
-        >
-          {isCollapsed ? (
-            <>
-              <ExpandMoreIcon sx={{ fontSize: 16 }} />
-              <Typography variant="caption">
-                Show more ({lineCount} lines)
-              </Typography>
-            </>
-          ) : (
-            <>
-              <ExpandLessIcon sx={{ fontSize: 16 }} />
-              <Typography variant="caption">Show less</Typography>
-            </>
-          )}
-        </Box>
-      )}
-    </Box>
-  );
-};
 
 const ChatNode = ({ id, data, selected }) => {
   const [hovered, setHovered] = useState(false);
