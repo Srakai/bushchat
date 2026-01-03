@@ -618,13 +618,17 @@ export const useNodeOperations = ({
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === nodeId) {
+            const collapsedKey =
+              messageType === "user"
+                ? "userMessageCollapsed"
+                : messageType === "assistant"
+                ? "assistantMessageCollapsed"
+                : "contentCollapsed";
             return {
               ...node,
               data: {
                 ...node.data,
-                [messageType === "user"
-                  ? "userMessageCollapsed"
-                  : "assistantMessageCollapsed"]: collapsed,
+                [collapsedKey]: collapsed,
               },
             };
           }
@@ -779,21 +783,47 @@ export const useNodeOperations = ({
         // Proceed to pending merge
         if (isSharedView) commitSharedChat();
 
-        const lcaId = findLowestCommonAncestorMultiple(
-          selectedNodeIds,
-          nodes,
-          edges
-        );
+        // Separate artifact nodes from chat nodes
+        const artifactNodeIds = selectedNodeIds.filter((id) => {
+          const node = nodes.find((n) => n.id === id);
+          return node?.type === "artifactNode";
+        });
+        const chatNodeIds = selectedNodeIds.filter((id) => {
+          const node = nodes.find((n) => n.id === id);
+          return node?.type !== "artifactNode";
+        });
 
-        // Build branches for all selected nodes
-        const branches = selectedNodeIds.map((id) => {
+        // Find LCA only among chat nodes (artifacts don't have paths)
+        const lcaId = chatNodeIds.length > 0
+          ? findLowestCommonAncestorMultiple(chatNodeIds, nodes, edges)
+          : "root";
+
+        // Build branches for chat nodes
+        const branches = chatNodeIds.map((id) => {
           const path = getPathToNode(id, nodes, edges);
           const lcaIndex = path.findIndex((n) => n.id === lcaId);
           const branch = path.slice(lcaIndex + 1);
           return {
             nodeId: id,
             messages: buildConversationFromPath(branch),
+            isArtifact: false,
           };
+        });
+
+        // Add artifact nodes as special branches
+        artifactNodeIds.forEach((id) => {
+          const node = nodes.find((n) => n.id === id);
+          if (node) {
+            const artifactContent = node.data.artifactType === "image"
+              ? `[Image: ${node.data.name}]`
+              : node.data.content;
+            branches.push({
+              nodeId: id,
+              messages: [{ role: "user", content: `[Artifact: ${node.data.name}]\n${artifactContent}` }],
+              isArtifact: true,
+              artifactName: node.data.name,
+            });
+          }
         });
 
         setPendingMerge({
@@ -845,25 +875,38 @@ export const useNodeOperations = ({
 
       const { selectedNodeIds, lcaId, branches } = pendingMerge;
 
-      // Get the base context from LCA path
-      const path1 = getPathToNode(selectedNodeIds[0], nodes, edges);
-      const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
-      const lcaPath = path1.slice(0, lcaIndex1 + 1);
-      const baseContext = buildConversationFromPath(lcaPath);
+      // Get the base context from LCA path (only if we have chat nodes)
+      const chatNodeIds = selectedNodeIds.filter((id) => {
+        const node = nodes.find((n) => n.id === id);
+        return node?.type !== "artifactNode";
+      });
+      
+      let baseContext = [];
+      if (chatNodeIds.length > 0) {
+        const path1 = getPathToNode(chatNodeIds[0], nodes, edges);
+        const lcaIndex1 = path1.findIndex((n) => n.id === lcaId);
+        const lcaPath = path1.slice(0, lcaIndex1 + 1);
+        baseContext = buildConversationFromPath(lcaPath);
+      }
 
       // Build merged prompt with all branches
       const branchCount = branches.length;
-      let mergedPrompt = `You are continuing a conversation that has branched into ${branchCount} paths. Here are all branches:\n\n`;
+      let mergedPrompt = `You are continuing a conversation that includes ${branchCount} sources. Here are all sources:\n\n`;
 
       branches.forEach((branch, index) => {
         const branchLabel = String.fromCharCode(65 + index); // A, B, C, D, ...
-        mergedPrompt += `=== BRANCH ${branchLabel} ===\n`;
-        for (const msg of branch.messages) {
-          mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+        if (branch.isArtifact) {
+          mergedPrompt += `=== ARTIFACT: ${branch.artifactName} ===\n`;
+          mergedPrompt += `${branch.messages[0]?.content || ""}\n\n`;
+        } else {
+          mergedPrompt += `=== BRANCH ${branchLabel} ===\n`;
+          for (const msg of branch.messages) {
+            mergedPrompt += `${msg.role.toUpperCase()}: ${msg.content}\n\n`;
+          }
         }
       });
 
-      mergedPrompt += "=== END BRANCHES ===\n\n";
+      mergedPrompt += "=== END SOURCES ===\n\n";
       mergedPrompt += userPrompt;
 
       const newNodeId = `node-${nodeIdCounterRef.current++}`;
@@ -892,13 +935,17 @@ export const useNodeOperations = ({
           status: "loading",
           isRoot: false,
           isMergedNode: true,
-          mergeParents: selectedNodeIds,
+          mergeParents: chatNodeIds, // Only chat nodes as parents for tree structure
+          mergedArtifacts: selectedNodeIds.filter((id) => {
+            const node = nodes.find((n) => n.id === id);
+            return node?.type === "artifactNode";
+          }),
           lcaId: lcaId,
         },
       };
 
-      // Create edges from all parent nodes
-      const newEdges = selectedNodeIds.map((parentId) => ({
+      // Create edges only from chat nodes (artifacts are standalone)
+      const chatEdges = chatNodeIds.map((parentId) => ({
         id: `edge-${parentId}-${newNodeId}`,
         source: parentId,
         target: newNodeId,
@@ -909,6 +956,24 @@ export const useNodeOperations = ({
           contextMode: CONTEXT_MODE.SINGLE,
         },
       }));
+
+      // Create edges from artifacts (different style)
+      const artifactNodeIds = selectedNodeIds.filter((id) => {
+        const node = nodes.find((n) => n.id === id);
+        return node?.type === "artifactNode";
+      });
+      const artifactEdges = artifactNodeIds.map((parentId) => ({
+        id: `edge-${parentId}-${newNodeId}`,
+        source: parentId,
+        target: newNodeId,
+        type: "smoothstep",
+        style: { stroke: "#ff9800", strokeWidth: 2, strokeDasharray: "5,5" },
+        data: {
+          isArtifactEdge: true,
+        },
+      }));
+
+      const newEdges = [...chatEdges, ...artifactEdges];
 
       setNodes((nds) => [...nds, newNode]);
       setEdges((eds) => [...eds, ...newEdges]);

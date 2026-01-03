@@ -1,5 +1,6 @@
 "use client";
 import React, { memo, useState } from "react";
+import { Handle, Position } from "reactflow";
 import { Box, Typography, IconButton, TextField, Tooltip } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
@@ -282,11 +283,21 @@ const ArtifactNode = ({ id, data, selected }) => {
             onToggleCollapse={handleToggleCollapse}
             lockScrollOnNodeFocus={data.lockScrollOnNodeFocus}
             useMarkdown={false}
-            maxHeight={300}
-            lineThreshold={12}
           />
         )}
       </Box>
+
+      {/* Output handle (bottom) - for connecting to merged nodes */}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        style={{
+          background: colors.accent.orange,
+          width: 8,
+          height: 8,
+          border: "none",
+        }}
+      />
     </Box>
   );
 };

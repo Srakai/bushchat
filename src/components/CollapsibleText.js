@@ -7,11 +7,18 @@ import MarkdownContent from "./MarkdownContent";
 import { colors } from "../styles/theme";
 
 const COLLAPSE_LINE_THRESHOLD = 16;
+const COLLAPSE_CHAR_THRESHOLD = 800; // Also collapse if text is long without many newlines
 const MAX_COLLAPSED_HEIGHT = 500; // Approximate height for 16 lines
 
 const countLines = (text) => {
   if (!text) return 0;
   return text.split("\n").length;
+};
+
+const shouldCollapse = (text, lineThreshold, charThreshold = COLLAPSE_CHAR_THRESHOLD) => {
+  if (!text) return false;
+  const lineCount = countLines(text);
+  return lineCount > lineThreshold || text.length > charThreshold;
 };
 
 const CollapsibleText = ({
@@ -22,13 +29,18 @@ const CollapsibleText = ({
   useMarkdown = true,
   maxHeight = MAX_COLLAPSED_HEIGHT,
   lineThreshold = COLLAPSE_LINE_THRESHOLD,
+  alwaysScrollable = false,
 }) => {
   const scrollRef = useRef(null);
   const lineCount = countLines(text);
-  const shouldShowCollapse = lineCount > lineThreshold;
-  // Use prop if provided, otherwise default based on line count
-  const isCollapsed =
-    collapsed !== undefined ? collapsed : lineCount > lineThreshold;
+  const exceedsThreshold = shouldCollapse(text, lineThreshold);
+  const shouldShowCollapse = !alwaysScrollable && exceedsThreshold;
+  // Use prop if provided, otherwise default based on threshold
+  const isCollapsed = collapsed !== undefined ? collapsed : exceedsThreshold;
+
+  // For alwaysScrollable mode, we always apply scroll styles
+  const applyScrollStyles =
+    alwaysScrollable || (isCollapsed && shouldShowCollapse);
 
   // Use effect to add wheel event listener with passive: false to allow preventDefault
   useEffect(() => {
@@ -59,14 +71,14 @@ const CollapsibleText = ({
 
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);
-  }, [lockScrollOnNodeFocus, isCollapsed]);
+  }, [lockScrollOnNodeFocus, isCollapsed, alwaysScrollable]);
 
   return (
     <Box sx={{ position: "relative" }}>
       <Box
         ref={scrollRef}
         sx={{
-          ...(isCollapsed && shouldShowCollapse
+          ...(applyScrollStyles
             ? {
                 maxHeight: maxHeight,
                 overflowY: "auto",
