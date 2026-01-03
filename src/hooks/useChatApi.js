@@ -81,7 +81,7 @@ export const useChatApi = (settings, options = {}) => {
       const requestBody = {
         model,
         messages,
-        max_completion_tokens: 4000,
+        //max_completion_tokens: 4000,
         stream: supportsStreaming,
       };
 
