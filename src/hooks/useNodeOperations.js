@@ -794,9 +794,10 @@ export const useNodeOperations = ({
         });
 
         // Find LCA only among chat nodes (artifacts don't have paths)
-        const lcaId = chatNodeIds.length > 0
-          ? findLowestCommonAncestorMultiple(chatNodeIds, nodes, edges)
-          : "root";
+        const lcaId =
+          chatNodeIds.length > 0
+            ? findLowestCommonAncestorMultiple(chatNodeIds, nodes, edges)
+            : "root";
 
         // Build branches for chat nodes
         const branches = chatNodeIds.map((id) => {
@@ -814,12 +815,18 @@ export const useNodeOperations = ({
         artifactNodeIds.forEach((id) => {
           const node = nodes.find((n) => n.id === id);
           if (node) {
-            const artifactContent = node.data.artifactType === "image"
-              ? `[Image: ${node.data.name}]`
-              : node.data.content;
+            const artifactContent =
+              node.data.artifactType === "image"
+                ? `[Image: ${node.data.name}]`
+                : node.data.content;
             branches.push({
               nodeId: id,
-              messages: [{ role: "user", content: `[Artifact: ${node.data.name}]\n${artifactContent}` }],
+              messages: [
+                {
+                  role: "user",
+                  content: `[Artifact: ${node.data.name}]\n${artifactContent}`,
+                },
+              ],
               isArtifact: true,
               artifactName: node.data.name,
             });
@@ -880,7 +887,7 @@ export const useNodeOperations = ({
         const node = nodes.find((n) => n.id === id);
         return node?.type !== "artifactNode";
       });
-      
+
       let baseContext = [];
       if (chatNodeIds.length > 0) {
         const path1 = getPathToNode(chatNodeIds[0], nodes, edges);

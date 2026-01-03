@@ -31,7 +31,6 @@ import FocusModeOverlay from "./FocusModeOverlay";
 import PanScrollToggle from "./PanScrollToggle";
 import LockScrollToggle from "./LockScrollToggle";
 import ArtifactModal from "./ArtifactModal";
-import AddArtifactButton from "./AddArtifactButton";
 
 // Hooks
 import { useChatApi } from "../hooks/useChatApi";
@@ -612,25 +611,23 @@ const TreeChatInner = () => {
 
         {/* Input Panel */}
         <Panel position="bottom-center">
-          <Box sx={{ display: "flex", alignItems: "flex-end", gap: 1 }}>
-            <AddArtifactButton onClick={() => setArtifactModalOpen(true)} />
-            <InputPanel
-              inputMessage={inputMessage}
-              onInputChange={setInputMessage}
-              onSubmit={handleSubmit}
-              selectedModel={selectedModel}
-              onModelChange={setSelectedModel}
-              modelsList={modelsList}
-              isRootSelected={selectedNode?.data?.isRoot}
-              isPendingMerge={!!pendingMerge}
-              onCancelPendingMerge={() => {
-                setPendingMerge(null);
-                setInputMessage("");
-              }}
-              webSearchEnabled={webSearchEnabled}
-              onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
-            />
-          </Box>
+          <InputPanel
+            inputMessage={inputMessage}
+            onInputChange={setInputMessage}
+            onSubmit={handleSubmit}
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+            modelsList={modelsList}
+            isRootSelected={selectedNode?.data?.isRoot}
+            isPendingMerge={!!pendingMerge}
+            onCancelPendingMerge={() => {
+              setPendingMerge(null);
+              setInputMessage("");
+            }}
+            webSearchEnabled={webSearchEnabled}
+            onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
+            onOpenArtifacts={() => setArtifactModalOpen(true)}
+          />
         </Panel>
 
         {/* Artifact Modal */}

@@ -15,7 +15,11 @@ const countLines = (text) => {
   return text.split("\n").length;
 };
 
-const shouldCollapse = (text, lineThreshold, charThreshold = COLLAPSE_CHAR_THRESHOLD) => {
+const shouldCollapse = (
+  text,
+  lineThreshold,
+  charThreshold = COLLAPSE_CHAR_THRESHOLD
+) => {
   if (!text) return false;
   const lineCount = countLines(text);
   return lineCount > lineThreshold || text.length > charThreshold;
