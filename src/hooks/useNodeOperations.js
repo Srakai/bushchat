@@ -137,9 +137,50 @@ export const useNodeOperations = ({
 
       setSelectedNodeId(newNodeId);
 
+      // Build conversation context
       const path = getPathToNode(parentNodeId, nodes, edges);
-      const conversationMessages = buildConversationFromPath(path);
-      conversationMessages.push({ role: "user", content: userMessage });
+      let conversationMessages = buildConversationFromPath(path);
+
+      // Check if the parent is an artifact node - need to include its content
+      if (parentNode?.type === "artifactNode") {
+        const isImage = parentNode.data?.artifactType === "image";
+        const supportsVision = modelSupportsVision(selectedModel, modelsData);
+
+        if (isImage && supportsVision) {
+          // Include image as multimodal content
+          const imageContent = [
+            {
+              type: "text",
+              text: `[Artifact: ${
+                parentNode.data?.name || "Image"
+              }]\n${userMessage}`,
+            },
+            {
+              type: "image_url",
+              image_url: { url: parentNode.data?.content },
+            },
+          ];
+          conversationMessages.push({ role: "user", content: imageContent });
+        } else if (isImage) {
+          // Model doesn't support vision, just mention the image
+          conversationMessages.push({
+            role: "user",
+            content: `[Artifact: ${
+              parentNode.data?.name || "Image"
+            } - image not included as model doesn't support vision]\n${userMessage}`,
+          });
+        } else {
+          // Text artifact
+          conversationMessages.push({
+            role: "user",
+            content: `[Artifact: ${parentNode.data?.name || "Text"}]\n${
+              parentNode.data?.content || ""
+            }\n\n${userMessage}`,
+          });
+        }
+      } else {
+        conversationMessages.push({ role: "user", content: userMessage });
+      }
 
       await sendChatRequest(
         conversationMessages,
