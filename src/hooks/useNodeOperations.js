@@ -1064,19 +1064,10 @@ export const useNodeOperations = ({
         // Add images
         for (const imgArtifact of imageArtifacts) {
           const imageUrl = imgArtifact.artifactContent;
-          // Check if it's a data URL
-          if (imageUrl.startsWith("data:")) {
-            contentParts.push({
-              type: "image_url",
-              image_url: { url: imageUrl },
-            });
-          } else {
-            // Regular URL
-            contentParts.push({
-              type: "image_url",
-              image_url: { url: imageUrl },
-            });
-          }
+          contentParts.push({
+            type: "image_url",
+            image_url: { url: imageUrl },
+          });
         }
 
         userMessageContent = contentParts;
