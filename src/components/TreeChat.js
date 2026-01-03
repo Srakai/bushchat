@@ -21,6 +21,7 @@ import { Box, Snackbar, Alert } from "@mui/material";
 
 // Components
 import ChatNode from "./ChatNode";
+import ArtifactNode from "./ArtifactNode";
 import MergeEdge from "./MergeEdge";
 import SettingsModal from "./SettingsModal";
 import WaitlistModal from "./WaitlistModal";
@@ -29,6 +30,8 @@ import InputPanel from "./InputPanel";
 import FocusModeOverlay from "./FocusModeOverlay";
 import PanScrollToggle from "./PanScrollToggle";
 import LockScrollToggle from "./LockScrollToggle";
+import ArtifactModal from "./ArtifactModal";
+import AddArtifactButton from "./AddArtifactButton";
 
 // Hooks
 import { useChatApi } from "../hooks/useChatApi";
@@ -63,6 +66,7 @@ import {
 
 const nodeTypes = {
   chatNode: ChatNode,
+  artifactNode: ArtifactNode,
 };
 
 const edgeTypes = {
@@ -76,6 +80,9 @@ const TreeChatInner = () => {
 
   // Waitlist modal state
   const [waitlistOpen, setWaitlistOpen] = useState(false);
+
+  // Artifact modal state
+  const [artifactModalOpen, setArtifactModalOpen] = useState(false);
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState({
@@ -398,6 +405,53 @@ const TreeChatInner = () => {
     }
   }, [nodes, edges, selectedNodeId]);
 
+  // Artifact ID counter ref
+  const artifactIdCounterRef = useRef(1);
+
+  // Create artifact node on canvas
+  const handleCreateArtifact = useCallback(
+    (artifact) => {
+      const artifactId = `artifact-${artifactIdCounterRef.current++}`;
+      const newNode = {
+        id: artifactId,
+        type: "artifactNode",
+        position: { x: 100, y: 100 },
+        data: {
+          name: artifact.name,
+          artifactType: artifact.type,
+          content: artifact.content,
+        },
+      };
+      setNodes((nds) => [...nds, newNode]);
+    },
+    [setNodes]
+  );
+
+  // Edit artifact node
+  const handleEditArtifact = useCallback(
+    (nodeId, updates) => {
+      setNodes((nds) =>
+        nds.map((node) =>
+          node.id === nodeId
+            ? { ...node, data: { ...node.data, ...updates } }
+            : node
+        )
+      );
+    },
+    [setNodes]
+  );
+
+  // Delete artifact node
+  const handleDeleteArtifact = useCallback(
+    (nodeId) => {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) =>
+        eds.filter((e) => e.source !== nodeId && e.target !== nodeId)
+      );
+    },
+    [setNodes, setEdges]
+  );
+
   // Get the selected node
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedNodeId),
@@ -413,21 +467,38 @@ const TreeChatInner = () => {
   // Inject callbacks into all nodes
   const nodesWithCallbacks = useMemo(() => {
     const selectedNodeIds = mergeMode?.selectedNodeIds || [];
-    return nodes.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        onAddBranch: handleAddBranch,
-        onEditNode: handleEditNode,
-        onDeleteNode: handleDeleteNode,
-        onMergeNode: handleMergeNode,
-        onRegenerateMerge: handleRegenerateMerge,
-        onToggleCollapse: handleToggleCollapse,
-        isMergeSource: selectedNodeIds.includes(node.id),
-        mergeSelectionCount: selectedNodeIds.length,
-        lockScrollOnNodeFocus,
-      },
-    }));
+    return nodes.map((node) => {
+      if (node.type === "artifactNode") {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            onEditArtifact: handleEditArtifact,
+            onDeleteArtifact: handleDeleteArtifact,
+            onMergeNode: handleMergeNode,
+            onToggleCollapse: handleToggleCollapse,
+            isMergeSource: selectedNodeIds.includes(node.id),
+            mergeSelectionCount: selectedNodeIds.length,
+            lockScrollOnNodeFocus,
+          },
+        };
+      }
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          onAddBranch: handleAddBranch,
+          onEditNode: handleEditNode,
+          onDeleteNode: handleDeleteNode,
+          onMergeNode: handleMergeNode,
+          onRegenerateMerge: handleRegenerateMerge,
+          onToggleCollapse: handleToggleCollapse,
+          isMergeSource: selectedNodeIds.includes(node.id),
+          mergeSelectionCount: selectedNodeIds.length,
+          lockScrollOnNodeFocus,
+        },
+      };
+    });
   }, [
     nodes,
     handleAddBranch,
@@ -436,6 +507,8 @@ const TreeChatInner = () => {
     handleMergeNode,
     handleRegenerateMerge,
     handleToggleCollapse,
+    handleEditArtifact,
+    handleDeleteArtifact,
     mergeMode,
     lockScrollOnNodeFocus,
   ]);
@@ -539,23 +612,33 @@ const TreeChatInner = () => {
 
         {/* Input Panel */}
         <Panel position="bottom-center">
-          <InputPanel
-            inputMessage={inputMessage}
-            onInputChange={setInputMessage}
-            onSubmit={handleSubmit}
-            selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
-            modelsList={modelsList}
-            isRootSelected={selectedNode?.data?.isRoot}
-            isPendingMerge={!!pendingMerge}
-            onCancelPendingMerge={() => {
-              setPendingMerge(null);
-              setInputMessage("");
-            }}
-            webSearchEnabled={webSearchEnabled}
-            onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
-          />
+          <Box sx={{ display: "flex", alignItems: "flex-end", gap: 1 }}>
+            <AddArtifactButton onClick={() => setArtifactModalOpen(true)} />
+            <InputPanel
+              inputMessage={inputMessage}
+              onInputChange={setInputMessage}
+              onSubmit={handleSubmit}
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
+              modelsList={modelsList}
+              isRootSelected={selectedNode?.data?.isRoot}
+              isPendingMerge={!!pendingMerge}
+              onCancelPendingMerge={() => {
+                setPendingMerge(null);
+                setInputMessage("");
+              }}
+              webSearchEnabled={webSearchEnabled}
+              onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
+            />
+          </Box>
         </Panel>
+
+        {/* Artifact Modal */}
+        <ArtifactModal
+          open={artifactModalOpen}
+          onClose={() => setArtifactModalOpen(false)}
+          onCreateArtifact={handleCreateArtifact}
+        />
 
         {/* Info Panel */}
         <Panel position="top-left">
