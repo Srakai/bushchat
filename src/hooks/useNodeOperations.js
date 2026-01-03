@@ -858,7 +858,6 @@ export const useNodeOperations = ({
         artifactNodeIds.forEach((id) => {
           const node = nodes.find((n) => n.id === id);
           if (node) {
-            const isImage = node.data.artifactType === "image";
             branches.push({
               nodeId: id,
               messages: [],
