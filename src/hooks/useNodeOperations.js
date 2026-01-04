@@ -856,6 +856,7 @@ export const useNodeOperations = ({
 
         // Add artifact nodes as special branches
         artifactNodeIds.forEach((id) => {
+          const node = nodes.find((n) => n.id === id);
           // Ensure artifactType exists before adding the artifact branch
           if (!node || !node.data || node.data.artifactType == null) {
             return;

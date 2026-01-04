@@ -411,6 +411,15 @@ const TreeChatInner = () => {
     }
   }, [nodes, edges, selectedNodeId]);
 
+  // Confirm merge from the info panel without double-clicking a node
+  const handleConfirmMerge = useCallback(() => {
+    const selectedIds = mergeMode?.selectedNodeIds || [];
+    if (selectedIds.length < 2) return;
+
+    // Trigger the existing merge flow by simulating a double-click on the first selection
+    handleMergeNode(selectedIds[0], true);
+  }, [mergeMode, handleMergeNode]);
+
   // Create artifact node on canvas
   const handleCreateArtifact = useCallback(
     (artifact) => {
@@ -678,6 +687,7 @@ const TreeChatInner = () => {
             onShareChat={handleShareChat}
             mergeMode={mergeMode}
             onCancelMerge={() => setMergeMode(null)}
+            onConfirmMerge={handleConfirmMerge}
             conversationHistoryLength={conversationHistory.length}
           />
         </Panel>

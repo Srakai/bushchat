@@ -38,9 +38,11 @@ const InfoPanel = ({
   onMergeChats,
   mergeMode,
   onCancelMerge,
+  onConfirmMerge,
   conversationHistoryLength,
 }) => {
   const [chatsExpanded, setChatsExpanded] = useState(false);
+  const mergeSelectionCount = mergeMode?.selectedNodeIds?.length || 0;
 
   // Organize chats into groups and ungrouped items
   // Groups are displayed with their members indented
@@ -287,33 +289,52 @@ const InfoPanel = ({
                 fontWeight: 500,
               }}
             >
-              🔀 Merge Mode ({mergeMode.selectedNodeIds?.length || 0} nodes
-              selected)
+              🔀 Merge Mode ({mergeSelectionCount} nodes selected)
             </Typography>
             <Typography
               variant="caption"
               sx={{ ...typography.muted, display: "block", mt: 0.5 }}
             >
-              {(mergeMode.selectedNodeIds?.length || 0) < 2
+              {mergeSelectionCount < 2
                 ? "Click more nodes to add to selection"
-                : "Double-click merge button to confirm, or add more nodes"}
+                : "Click Merge or double-click a node merge icon to confirm"}
             </Typography>
-            <Button
-              size="small"
-              onClick={onCancelMerge}
-              sx={{
-                mt: 1,
-                color: colors.accent.orange,
-                borderColor: colors.accent.orange,
-                "&:hover": {
-                  borderColor: colors.accent.orangeHover,
-                  backgroundColor: "rgba(255,152,0,0.1)",
-                },
-              }}
-              variant="outlined"
-            >
-              Cancel Merge
-            </Button>
+            <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+              <Button
+                size="small"
+                onClick={onCancelMerge}
+                sx={{
+                  color: colors.accent.orange,
+                  borderColor: colors.accent.orange,
+                  "&:hover": {
+                    borderColor: colors.accent.orangeHover,
+                    backgroundColor: "rgba(255,152,0,0.1)",
+                  },
+                }}
+                variant="outlined"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="small"
+                onClick={onConfirmMerge}
+                disabled={mergeSelectionCount < 2}
+                sx={{
+                  color: colors.text.primary,
+                  backgroundColor: colors.accent.orange,
+                  "&:hover": {
+                    backgroundColor: colors.accent.orangeHover,
+                  },
+                  "&.Mui-disabled": {
+                    color: colors.text.muted,
+                    backgroundColor: "rgba(255,255,255,0.06)",
+                  },
+                }}
+                variant="contained"
+              >
+                Merge
+              </Button>
+            </Box>
           </>
         ) : (
           <Typography
